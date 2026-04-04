@@ -104,7 +104,7 @@ Consumer	(configured)
 
 ---
 
-Architecture Notes
+# Architecture Notes
 
 Routing pattern — dict-based dispatch avoids if/else chains:
 
@@ -126,7 +126,7 @@ ETLError → FetchError, ParseError, ValidationError
 
 ---
 
-## Setup
+# Setup
 ```bash
 # Clone  
 git clone https://github.com/arxcore/etl-project.git  
@@ -157,7 +157,7 @@ python src/main.py --upload
 
 ## Validated Against Real Data
 
-Indicator	Source	Rows Validated
+# Indicator	Source	Rows Validated
 
 Core CPI YoY	BLS	35
 Non-Farm Payrolls	BLS	48
