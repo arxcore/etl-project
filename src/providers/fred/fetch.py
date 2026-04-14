@@ -1,9 +1,9 @@
 from datetime import datetime
-import requests
 import logging
 from providers.bls.fetch import ApiKeyError
 from providers import BaseMetaModel
 from providers.fred.model import FREDRawResponse
+import aiohttp
 from tenacity import (
     retry,
     wait_exponential,
@@ -26,7 +26,7 @@ class FredRequestError(Exception):
     pass
 
 
-class FREDFetch:
+class FREDProvider:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key
         self.url = "https://api.stlouisfed.org/fred/series/observations"
@@ -34,11 +34,21 @@ class FREDFetch:
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2, min=2, max=70),
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        retry=retry_if_exception_type(
+            (
+                aiohttp.ClientResponseError,
+                aiohttp.ClientConnectionError,
+                aiohttp.ServerTimeoutError,
+            )
+        ),
         reraise=True,
     )
-    def request(self, meta: BaseMetaModel, start_year: str, end_year: str):
-        _paramss = {
+    async def request(self, meta: BaseMetaModel, start_year: str, end_year: str):
+
+        if not self.api_key:
+            raise ApiKeyError(f"Api Key not found for name: {meta.api}")
+
+        params: dict[str, str] = {
             "api_key": self.api_key,
             "file_type": "json",
             "series_id": meta.id,
@@ -46,11 +56,14 @@ class FREDFetch:
             "observation_end": end_year,
             "sort_order": "desc",
         }
-        response = requests.get(self.url, params=_paramss, timeout=30)
-        response.raise_for_status()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                self.url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                response.raise_for_status()
 
-        logger.info("FRED Return Status Codea: %s", response.status_code)
-        data = response.json()
+                logger.info("FRED Return Status Codea: %s", response.status)
+                data = await response.json()
 
         if "error_code" in data:
             error_msg = data.get("error_message", "Unknown Error")
@@ -65,25 +78,26 @@ class FREDFetch:
 
         return FREDRawResponse.model_validate(data)
 
-    def fetch_data(self, meta: BaseMetaModel):
+    async def fetch_data(self, meta: BaseMetaModel):
         """
         Fetch Fred Data
         """
-        if not self.api_key:
-            raise ApiKeyError(f"Api Key not found for name: {meta.api}")
         start_year = f"{meta.start_year}-{meta.start_month:02d}-01"
 
         end_year = datetime.now().strftime("%Y-%m-%d")
 
         try:
-            data_response = self.request(meta, start_year, end_year)
+            data_response = await self.request(meta, start_year, end_year)
             result: FREDRawResponse = data_response
 
             logger.debug("RaW Data FRED %s", result)
             logger.info("RAW data FRED %s", len(result.observations))
 
             return result
-        except requests.RequestException as e:
-            raise FredRequestError("Request to FRED Api unknown error") from e
+
+        except aiohttp.ServerTimeoutError as e:
+            raise FredRequestError(f"Timeout Error from FRED requests {e}")
+        except aiohttp.ClientError as e:
+            raise FredRequestError(f"Client Error for FRED Api {e}") from e
         except Exception as e:
-            raise FredRequestError("UnException Error to Fred Server") from e
+            raise FredRequestError(f"UnException Error from Fred Server {e}") from e

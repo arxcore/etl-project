@@ -1,31 +1,27 @@
 from config.settings import Resources
-import logging
 from providers.bls import BLSProvider
 from providers.fred import FREDProvider
 from providers.bea import BEAProvider
 from providers import BaseMetaModel
 from pipeline.routing import BaseFetcherReturn
+import logging
 
 logger = logging.getLogger(__name__)
 
 
-class FetchRouterError(Exception):
-    pass
+class RawProcessors:
+    """Raw Processors Fetch ALL Prioviders Data"""
 
-
-class RoutingFetcher:
     def __init__(self, resource: Resources | None = None):
         self.resource = resource or Resources()
-        self.fetch_router = {
+        self.providers = {
             "bls": BLSProvider(self.resource.bls_api_key),
             "fred": FREDProvider(self.resource.fred_api_key),
             "bea": BEAProvider(self.resource.bea_api_key),
         }
 
-    async def fetch_api_type(self, meta: BaseMetaModel) -> BaseFetcherReturn:
-        """
-        Fetch Data Diverence Source
-        """
+    async def process_raw_data(self, meta: BaseMetaModel) -> BaseFetcherReturn:
+        """Fetch Raw Data from ALL Prioviders"""
         logger.info("=" * 50)
         logger.info("Fetch Raw Data From %s |  ApiID %s", meta.api, meta.id)
         logger.info(
@@ -35,15 +31,14 @@ class RoutingFetcher:
             meta.freq,
         )
         logger.info("=" * 50)
+        if meta.api not in self.providers:
+            # TODO: refactore with exception hierarky patern
+            raise ValueError(f"Source {meta.id} not Found")
         try:
-            if meta.api not in self.fetch_router:
-                raise FetchRouterError(f"Api type {meta.api} not found in fetch router")
-            fetcher_cls = self.fetch_router[meta.api]
-
-            raw_data = await fetcher_cls.fetch_data(meta)
-
+            providers_cls = self.providers[meta.api]
+            raw_data = await providers_cls.fetch_data(meta)
             return BaseFetcherReturn(api_type=meta.api, fetch_result=raw_data)
         except Exception as e:
-            raise FetchRouterError(
-                f"Failed to fetch data for api type: {meta.api}-{e}"
-            ) from e
+            # TODO:
+            logger.error("Error Fetch Data from Source %s, %s", meta.api, e)
+            raise

@@ -1,6 +1,8 @@
 from pipeline.routing import BaseParseReturn
 from providers.bea.model import BEARawRespons
 import logging
+from pipeline.parsers.registry import Frequency, Providers, register
+from pipeline.routing.model import BaseFetcherReturn
 
 logger = logging.getLogger(__name__)
 
@@ -9,24 +11,27 @@ class ParseError(Exception):
     pass
 
 
-def parse_qsa_bea(data: BEARawRespons) -> BaseParseReturn:
+@register(Providers.bea, Frequency.qsa)
+def parse_qsa_bea(data: BaseFetcherReturn) -> BaseParseReturn:
     """
     Parse data QuarterlySeasonallyAdjusted
     Return dict[str, float]
     """
+    RAW_DATA = BEARawRespons.model_validate(data.fetch_result)
+
     logger.debug(
         "Parse data BEA QSA, Accept (%s data), Example: %s",
-        len(data.BEAAPI.Results.Data),
-        data.BEAAPI.Results.Data,
+        len(RAW_DATA.BEAAPI.Results.Data),
+        RAW_DATA.BEAAPI.Results.Data,
     )
     parse_data: dict[str, float] = {}
     missing_value: list[str] = []
-    for raw_data in data.BEAAPI.Results.Data:
-        date = raw_data.TimePeriod
+    for item in RAW_DATA.BEAAPI.Results.Data:
+        date = item.TimePeriod
         year, quarter = date.split("Q")
         month = int(quarter) * 3
         date_key = f"{year}-{month:02d}-01"
-        str_value = raw_data.DataValue
+        str_value = item.DataValue
         if str_value in ["-", "N/A", "NA", "", " "]:
             logger.warning("Skipping Parsing data: %s", date)
             missing_value.append(date)
@@ -40,7 +45,7 @@ def parse_qsa_bea(data: BEARawRespons) -> BaseParseReturn:
             ) from e
 
     logger.debug(
-        "Parse data BEA QSA Done with data %s, (%s data)",
+        "Parse data BEA QSA Done Sampl data  %s",
         (parse_data.items(), len(parse_data)),
     )
 

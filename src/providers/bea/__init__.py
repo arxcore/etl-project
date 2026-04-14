@@ -1,4 +1,4 @@
-from .fetch import BEAFetch
+from .fetch import BEAProvider
 from .model import BEAConfigModel
 
-__all__ = ["BEAFetch", "BEAConfigModel"]
+__all__ = ["BEAProvider", "BEAConfigModel"]

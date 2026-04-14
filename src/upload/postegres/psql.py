@@ -3,26 +3,31 @@ import psycopg2
 import logging
 from contextlib import contextmanager
 from pipeline.processors.indicator import FinalFormatResult
-from config.settings import ResourceAPIkey
+from config.settings import Resources
 
 logger = logging.getLogger(__name__)
 
 
 @contextmanager
 def connect():
-    resource = ResourceAPIkey()
+    resource = Resources()
     conn = psycopg2.connect(resource.postgres_dsn)
     try:
         yield conn
         conn.commit()
     except Exception:
         conn.rollback()
+        raise
     finally:
         conn.close()
 
 
-def upload_to_db(data: FinalFormatResult):
+async def upload_to_db(data: FinalFormatResult):
+    # TODO:
+    # refcatore with async psycopg3
+
     logger.info("data to store %s", len(data.format_result))
+
     # conn
     with connect() as conn:
         cur = conn.cursor()

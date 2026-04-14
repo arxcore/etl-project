@@ -1,18 +1,23 @@
 import argparse
+import asyncio
 import logging
 import sys
 from typing import Optional
 import traceback
+from pipeline.processors.indicator import FinalFormatResult, IndicatorsProcessors
+from pipeline.processors.parse import ParseProcessors
+from pipeline.processors.raw import RawProcessors
+from pipeline.processors.standardized import StandardizerProcessors
 from upload.postegres.psql import upload_to_db
 from config.metadata import ALL_INDICATORS
 from monitoring.base_logging.logger import configure_logging
-from pipeline.orchestrator import run_all, run_by_single
+from pipeline.orchestrator import Orchest
 
 logger = logging.getLogger(__name__)
 
 
 def list_of_indicators() -> None:
-    """list availabel indicators"""
+    """list available indicators"""
 
     for country, category in ALL_INDICATORS.items():
         print(f"\n-{country}:")
@@ -90,7 +95,15 @@ def apply_log_level(log_level: int) -> None:
     logger.info("Set Logging Level Name %s ", log_name)
 
 
-def main():
+def build_injection() -> Orchest:
+    procc_raw = RawProcessors()
+    procc_standardizer = StandardizerProcessors()
+    procc_parse = ParseProcessors()
+    procc_indicator = IndicatorsProcessors(procc_raw, procc_parse, procc_standardizer)
+    return Orchest(procc_indicator)
+
+
+async def main() -> FinalFormatResult | None:
     """Main Execute command line pipeline"""
     parse = argparse.ArgumentParser()
     main_group = parse.add_argument_group("structure data")
@@ -138,13 +151,13 @@ def main():
         list_of_indicators()
         return
     # Country is required for Single mode indicators and etc.., (exclude run all)
-    if not args.country and args.run in ("single"):
+    if not args.country and args.run == "single":
         logger.warning("country is required")
         parse.print_help()
         sys.exit(1)
 
     # Validate Warning, if run mode not give args Indicator Name
-    if args.run in ("single") and not args.name:
+    if args.run == "single" and not args.name:
         logger.warning("name is required")
         parse.print_help()
         sys.exit(1)
@@ -156,13 +169,10 @@ def main():
             sys.exit(1)
 
     # Execute Pipeline
-    data = None
-    try:
-        # Default Mode Run Pipeline
-        if args.run == "all":
-            logger.info("Run ALL Config Indicators")
-            data = run_all()
+    orchest: Orchest = build_injection()
 
+    data: FinalFormatResult | None = None
+    try:
         # Run Single Indicator
         if args.run == "single":
             logger.info("=" * 50)
@@ -171,20 +181,26 @@ def main():
                 args.country,
                 args.name,
             )
-            data = run_by_single(args.country, args.name)
+            data = await orchest.run_by_single(args.country, args.name)
 
-        # Upload to DataBase
+        # Default Mode Run Pipeline
+        elif args.run == "all":
+            logger.info("Run ALL Config Indicators")
+            data = await orchest.run_all()
+
+        # store data to db
         if args.upload and data is not None:
-            db = upload_to_db(data)
+            await upload_to_db(data)  # upload_to_db(data)
+
             logger.info(
-                "Succesfuly Upload Data To Postgres (%s Data) ", len(data.format_result)
+                "Upload Data To Postgres with  (%s Data) ",
+                len(data.format_result),
             )
-            return db
 
         # Summary Final Results Pipeline Data
         logger.info("=" * 50)
         logger.info(
-            "Finall Data Records (%s Data)",
+            "Final Data Records (%s Data)",
             len(data.format_result) if data is not None else 0,
         )
 
@@ -195,4 +211,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

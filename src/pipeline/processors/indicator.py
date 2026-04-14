@@ -1,10 +1,16 @@
 from pydantic import BaseModel
-from pipeline.processors.data import DataProcessors, StandardizedResult
+
+# from pipeline.processors.data import StandardizedResult
+from pipeline.processors.standardized import StandardizedResult
 from pipeline.processors.date import DateProcessors, FilterDatesResult
+from pipeline.processors.raw import RawProcessors
+from pipeline.processors.standardized import StandardizerProcessors
+from pipeline.processors.parse import ParseProcessors
 from pipeline.calculation import DataCalculation
 from datetime import datetime
 import logging
 from providers import BaseMetaModel
+from pipeline.routing.model import BaseFetcherReturn, BaseParseReturn
 
 
 logger = logging.getLogger(__name__)
@@ -43,26 +49,45 @@ class FinalFormatResult(BaseModel):
 class IndicatorsProcessors:
     """Handling Process indicators"""
 
+    # NOTE:
+    # review this class
+    def __init__(
+        self,
+        raw_processors: RawProcessors,
+        parse_processors: ParseProcessors,
+        standardizer: StandardizerProcessors,
+    ):
+        self.raw = raw_processors
+        self.parse = parse_processors or ParseProcessors()
+        self.standardized = standardizer
+
     # ETL Procesed indicators
-    def process_indicators(
+    async def process_indicators(
         self, name: str, meta: BaseMetaModel, category: str, country: str
     ) -> FinalFormatResult:
         """Main Process ETL indicatros"""
 
         try:
             # step 1. Raw Data
-            raw_formatted_data = DataProcessors.fetch_and_parse(name, meta)
+            raw_process: BaseFetcherReturn = await self.raw.process_raw_data(meta)
 
-            # step 2. filter dates
-            filtered_dates = self.filter_dates(raw_formatted_data, name, meta)
+            # step 2. parse data
+            parsed_data: BaseParseReturn = self.parse(raw_process, meta.api, meta.freq)
 
-            # step 3. calculation
+            # step 3. standarized
+            standardizer: StandardizedResult = (
+                self.standardized.process_standardized_data(parsed_data, meta, name)
+            )
+
+            # step 4. filter dates
+            filtered_dates = self.filter_dates(standardizer, name, meta)
+
+            # step 5. calculation
             calculated = self.calculated_values(filtered_dates, name, meta)
 
-            # step 4. final result standarized
-            frequency = meta.freq  # meta["freq"] or meta["frequency"]
+            # step 6. final result standarized
             final_result = self.format_result(
-                calculated, name, frequency, category, country
+                calculated, name, meta.freq, category, country
             )
 
             return final_result
@@ -141,7 +166,7 @@ class IndicatorsProcessors:
                     frequency=frequency,
                 )
             )
-
         logger.info("Format Result... Done With (%s Data)", len(data))
         logger.debug("Final Result Data, example %s", data[:10])
+
         return FinalFormatResult(format_result=data)

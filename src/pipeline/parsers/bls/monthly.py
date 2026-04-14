@@ -1,6 +1,8 @@
 import logging
 from pipeline.routing import BaseParseReturn
 from providers.bls.model import BLSSeries
+from pipeline.parsers.registry import register, Providers, Frequency
+from pipeline.routing.model import BaseFetcherReturn
 
 
 logger = logging.getLogger(__name__)
@@ -10,7 +12,8 @@ class ParseError(Exception):
     pass
 
 
-def parse_monthly_bls(data: BLSSeries) -> BaseParseReturn:
+@register(Providers.bls, Frequency.monthly)
+def parse_monthly_bls(data: BaseFetcherReturn) -> BaseParseReturn:
     """
     Docstring for parse_monthly_bls
 
@@ -18,18 +21,21 @@ def parse_monthly_bls(data: BLSSeries) -> BaseParseReturn:
 
     Return dict[str, float]
     """
+    # Validation BaseFetcherReturn
+    RAW_DATA = BLSSeries.model_validate(data.fetch_result)
+
     parse_data: dict[str, float] = {}
     error: list[str] = []
     skip_value = 0
 
     logger.debug(
         "Parsing Data, debug raw data to procesed (%s Data), Example: %s",
-        len(data.series),
-        data.series,
+        len(RAW_DATA.series),
+        RAW_DATA.series,
     )
 
     try:
-        for item in data.series:
+        for item in RAW_DATA.series:
             for data_point in item.data:
                 # target 2023-01: value
 

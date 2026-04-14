@@ -27,7 +27,7 @@ def test_pars_qsa_bea_raise_error():
             Results=BEAResult(
                 Data=[
                     BEAField(TimePeriod="2020Q2", DataValue="Comingson"),
-                    BEAField(TimePeriod="2020Q3", DataValue="."),
+                    BEAField(TimePeriod="2020Q3", DataValue="w"),
                     BEAField(TimePeriod="2020Q4", DataValue="  /"),
                 ]
             )
@@ -35,3 +35,19 @@ def test_pars_qsa_bea_raise_error():
     )
     with pytest.raises(ParseError):
         parse_qsa_bea(bad_data)
+
+
+def test_pars_qsa_bea_with_negative_values():
+    negative_value_data = BEARawRespons(
+        BEAAPI=BEAapi(
+            Results=BEAResult(
+                Data=[
+                    BEAField(TimePeriod="2021Q1", DataValue="-12345"),
+                    BEAField(TimePeriod="2021Q2", DataValue="67890"),
+                ]
+            )
+        )
+    )
+    result = parse_qsa_bea(negative_value_data)
+    assert result.parse_result["2021-03-01"] == -12345
+    assert result.parse_result["2021-06-01"] == 67890

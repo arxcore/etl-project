@@ -1,4 +1,4 @@
-from .fetch import BLSFetch
+from .fetch import BLSProvider
 from .model import (
     BLSConfigModel,
     BLSFootnotes,
@@ -9,7 +9,7 @@ from .model import (
 )
 
 __ALL__ = [
-    BLSFetch,
+    BLSProvider,
     BLSConfigModel,
     BLSFootnotes,
     BLSRawData,

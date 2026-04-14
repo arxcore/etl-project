@@ -2,7 +2,7 @@ from datetime import datetime
 import re
 import logging
 from pydantic import BaseModel
-from pipeline.processors.data import StandardizedResult
+from pipeline.processors.standardized import StandardizedResult
 
 logger = logging.getLogger(__name__)
 

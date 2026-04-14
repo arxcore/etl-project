@@ -1,9 +1,9 @@
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Literal
 
 
 class BaseFetcherReturn(BaseModel):
-    api_type: str
+    api_type: Literal["bls", "fred", "bea"]
     fetch_result: Any
 
 
