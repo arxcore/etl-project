@@ -5,6 +5,7 @@ from providers.bea.model import BEARawRespons
 from providers.bls.model import BLSSeries
 from providers.fred import FREDRawResponse
 
+
 logger = logging.getLogger(__name__)
 
 

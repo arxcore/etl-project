@@ -12,6 +12,7 @@ from upload.postegres.psql import upload_to_db
 from config.metadata import ALL_INDICATORS
 from monitoring.base_logging.logger import configure_logging
 from pipeline.orchestrator import Orchest
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
