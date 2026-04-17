@@ -1,6 +1,7 @@
 from pipeline.routing import BaseFetcherReturn, BaseParseReturn
 import logging
 from pipeline.parsers import PARSE_REGISTER
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ class ParseProcessors:
         try:
             parsed = PARSE_REGISTER[api][freq]
             return parsed(raw_data)
-        except Exception as e:
-            # TODO:
-            # except Hierarky handling
-            raise KeyError(f"api {api} not found in register parse") from e
+        except exc.ParseDataError:
+            logger.exception(f"api {api} not found in register parse")
+            raise

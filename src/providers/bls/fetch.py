@@ -9,16 +9,9 @@ from providers.metamodel import BaseMetaModel
 from providers.bls.model import BLSRawResponsedata, BLSSeries
 import logging
 import aiohttp
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class BlsFetchError(Exception):
-    pass
-
-
-class ApiKeyError(Exception):
-    pass
 
 
 class BLSProvider:
@@ -47,7 +40,9 @@ class BLSProvider:
 
         # validasi api key if is valid or missing
         if not self.api_key:
-            raise ApiKeyError("API KEY ERROR error api key please check on .env file")
+            raise exc.ResourceNotFound(
+                "API KEY ERROR error api key please check on .env file"
+            )
 
         payload: dict[str, list[str] | str | int] = {
             "seriesid": [meta.id],
@@ -67,7 +62,7 @@ class BLSProvider:
 
         if data.get("status") != "REQUEST_SUCCEEDED":
             msg = data.get("message", ["Unknown api error"])
-            raise BlsFetchError(msg[0] if msg else "Unknown api error")
+            raise exc.BLSRequestsError(msg[0] if msg else "Unknown api error")
 
         logger.debug("BLS RAW DATA JSON: %s", data)
         return BLSRawResponsedata.model_validate(data)
@@ -91,10 +86,12 @@ class BLSProvider:
             return result
 
         except aiohttp.ServerTimeoutError as e:
-            raise BlsFetchError(f"Timeout from BLS requets {e}") from e
-
+            logger.error(f"Timeout from BLS requets {e}")
+            raise
         except aiohttp.ClientError as re:
-            raise BlsFetchError(f"Client Error from BLS  {re}") from re
+            logger.error(f"Client Error from BLS  {re}")
+            raise
 
-        except Exception as e:
-            raise BlsFetchError(f"FetchDataBLS Error {e}") from e
+        except exc.BLSRequestsError:
+            logger.exception("FetchDataBLS Error")
+            raise

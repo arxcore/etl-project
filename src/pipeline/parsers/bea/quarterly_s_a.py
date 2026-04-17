@@ -3,12 +3,9 @@ from providers.bea.model import BEARawRespons
 import logging
 from pipeline.parsers.registry import Frequency, Providers, register
 from pipeline.routing.model import BaseFetcherReturn
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class ParseError(Exception):
-    pass
 
 
 @register(Providers.bea, Frequency.qsa)
@@ -40,9 +37,11 @@ def parse_qsa_bea(data: BaseFetcherReturn) -> BaseParseReturn:
             value = float(str_value)
             parse_data[date_key] = value
         except ValueError as e:
-            raise ParseError(
-                f"Parse Error for data: {date} with value: {str_value}-{e}"
-            ) from e
+            logger.error(f"Parse Error for data: {date} with value: {str_value}-{e}")
+            continue
+        except exc.BEAParserError:
+            logger.exception("Parsing BEA QSA Unknown ERROR")
+            raise
 
     logger.debug(
         "Parse data BEA QSA Done Sampl data  %s",

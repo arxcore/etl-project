@@ -1,8 +1,9 @@
 from providers.metamodel import BaseMetaModel
-from pipeline.routing.parser_manage import BaseParseReturn
+from pipeline.routing import BaseParseReturn
 from pydantic import BaseModel
 import logging
 from datetime import datetime
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,6 @@ class StandardizedItems(BaseModel):
 
 class StandardizedResult(BaseModel):
     standardized_data: dict[str, StandardizedItems]
-
-
-class StandardizedError(Exception):
-    pass
 
 
 class StandardizerProcessors:
@@ -42,12 +39,8 @@ class StandardizerProcessors:
                         frequency=meta.freq,
                         processed=datetime.now().isoformat(),
                     )
-                except Exception as e:
-                    logger.warning(
-                        "Standardized Skipping data for name %s | Error %s",
-                        name,
-                        e,
-                    )
+                except exc.InvalidStandardized:
+                    logger.warning("Skipping data for name %s", name)
                     error.append(date_key)
                     continue
             if error:
@@ -55,17 +48,17 @@ class StandardizerProcessors:
                     "Standardized, Total Skipping Error %s ", len(error), error
                 )
             if not result:
-                raise StandardizedError(
-                    f"Standardized result Unknown Error name: {name}, source: {meta.api}"
+                exc.ResultsNotFound(
+                    f"NO-Result standardized for name: {name}, source: {meta.api}"
                 )
+                raise
             logger.info("=" * 50)
             logger.info("Create Standardized For %s", name)
             logger.info(
                 "Sample Standardized Data %s",
                 list[tuple[str, StandardizedItems]](result.items())[:2],
             )
-        except StandardizedError:
+        except exc.StandardizedError:
+            logger.exception("Standardized Proccess Failed")
             raise
-        except Exception as e:
-            raise StandardizedError(f"Standardized Proccess Failed {e}") from e
         return StandardizedResult(standardized_data=result)

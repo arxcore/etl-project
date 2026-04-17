@@ -1,6 +1,5 @@
 from datetime import datetime
 import logging
-from providers.bls.fetch import ApiKeyError
 from providers import BaseMetaModel
 from providers.fred.model import FREDRawResponse
 import aiohttp
@@ -10,20 +9,9 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
 )
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class AuthenticationError(Exception):
-    pass
-
-
-class RateLimitError(Exception):
-    pass
-
-
-class FredRequestError(Exception):
-    pass
 
 
 class FREDProvider:
@@ -46,7 +34,7 @@ class FREDProvider:
     async def request(self, meta: BaseMetaModel, start_year: str, end_year: str):
 
         if not self.api_key:
-            raise ApiKeyError(f"Api Key not found for name: {meta.api}")
+            raise exc.ResourceNotFound(f"Api Key not found for name: {meta.api}")
 
         params: dict[str, str] = {
             "api_key": self.api_key,
@@ -70,11 +58,13 @@ class FREDProvider:
             logger.error("FRED API Error: %s", error_msg)
 
             if data.get("error_code") == 429:
-                raise RateLimitError(f"RateLimitError {error_msg}")
+                raise exc.RateLimit(f"Ratelimit requests: {error_msg}")
             elif data.get("error_code") == 401:
-                raise AuthenticationError(f"AuthenticationError {error_msg} ")
+                raise exc.AuthenticationError(
+                    f"Authentication error from requests: {error_msg} "
+                )
             else:
-                raise FredRequestError(f"Unknown FRED Error {error_msg}")
+                logger.error(f"Unknown FRED Requests Error {error_msg}")
 
         return FREDRawResponse.model_validate(data)
 
@@ -96,8 +86,11 @@ class FREDProvider:
             return result
 
         except aiohttp.ServerTimeoutError as e:
-            raise FredRequestError(f"Timeout Error from FRED requests {e}")
+            logger.error(f"Timeout Error from FRED requests {e}")
+            raise
         except aiohttp.ClientError as e:
-            raise FredRequestError(f"Client Error for FRED Api {e}") from e
-        except Exception as e:
-            raise FredRequestError(f"UnException Error from Fred Server {e}") from e
+            logger.error(f"Client Error for FRED Api {e}")
+            raise
+        except exc.FREDRequestsError:
+            logger.exception("Un-Expected Error FRED Requests")
+            raise

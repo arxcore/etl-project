@@ -1,7 +1,6 @@
 from datetime import datetime
 import aiohttp
 from providers.bea.model import BEARawRespons
-from providers.bls.fetch import ApiKeyError
 from providers import BaseMetaModel
 import logging
 from tenacity import (
@@ -10,12 +9,9 @@ from tenacity import (
     retry_if_exception_type,
     wait_exponential,
 )
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class BEARequestFailed(Exception):
-    pass
 
 
 class BEAProvider:
@@ -47,7 +43,7 @@ class BEAProvider:
     async def request_data(self, meta: BaseMetaModel):
 
         if not self.api_key:
-            raise ApiKeyError(f"ApiKey Not found for {meta.api}")
+            raise exc.ResourceNotFound(f"ApiKey Not found for {meta.api}")
 
         # build Start year and end year
         start_range = list(range(meta.start_year, datetime.now().year + 1))
@@ -85,8 +81,11 @@ class BEAProvider:
 
             return result
         except aiohttp.ServerTimeoutError as e:
-            raise BEARequestFailed(f"Timeout request to BEA {e}") from e
+            logger.error(f"Timeout request to BEA {e}")
+            raise
         except aiohttp.ClientError as e:
-            raise BEARequestFailed(f"Client Error for BEA requests {e}") from e
-        except Exception as e:
-            raise BEARequestFailed(f"UNExpected Error BEA Requests {e}") from e
+            logger.error(f"Client Error for BEA requests {e}")
+            raise
+        except exc.BEARequestsError:
+            logger.exception("Un-Expected Error BEA Requests")
+            raise

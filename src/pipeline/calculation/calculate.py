@@ -2,17 +2,9 @@ from datetime import datetime
 from datetime import timedelta
 import logging
 from pipeline.processors.date import FilterDatesResult
-
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class CalculatedMethodUnknown(Exception):
-    pass
-
-
-class CalculatedError(Exception):
-    pass
 
 
 class DataCalculation:
@@ -170,16 +162,15 @@ class DataCalculation:
 
         # return DataCalculation.raw_value(date_parse)
         if method not in calculated:
-            raise CalculatedMethodUnknown(
-                f"Unknown Type Calculated, for method {method}"
-            )
+            logger.error(f"Unknown Type Calculated, for method {method}")
+            raise
         try:
             return calculated[method]()
         except ZeroDivisionError as e:
-            raise CalculatedError(
-                f"UnExpected zero value in calculated,, please check it for method {method}"
-            ) from e
-        except Exception as e:
-            raise CalculatedError(
-                f"Un-Expected Error Calculated, method {method}"
-            ) from e
+            logger.error(f"CalculatedError, Method {method} Name {name} | {e}")
+            raise
+        except exc.CalculateError:
+            logger.exception(
+                f"Un-Expected Error Calculated, method {method}, Name {name}"
+            )
+            raise

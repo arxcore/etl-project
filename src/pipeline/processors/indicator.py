@@ -1,35 +1,20 @@
 from pydantic import BaseModel
-
-# from pipeline.processors.data import StandardizedResult
 from pipeline.processors.standardized import StandardizedResult
 from pipeline.processors.date import DateProcessors, FilterDatesResult
-from pipeline.processors.raw import RawProcessors
 from pipeline.processors.standardized import StandardizerProcessors
-from pipeline.processors.parse import ParseProcessors
 from pipeline.calculation import DataCalculation
 from datetime import datetime
 import logging
 from providers import BaseMetaModel
-from pipeline.routing.model import BaseFetcherReturn, BaseParseReturn
-
+from pipeline.routing import (
+    BaseFetcherReturn,
+    BaseParseReturn,
+    RawProcessors,
+    ParseProcessors,
+)
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class ProcessIndicatorsError(Exception):
-    pass
-
-
-class FilterError(Exception):
-    pass
-
-
-class CalculateError(Exception):
-    pass
-
-
-class FinalResultError(Exception):
-    pass
 
 
 class FinalFormatItems(BaseModel):
@@ -91,12 +76,17 @@ class IndicatorsProcessors:
             )
 
             return final_result
-        except (FilterError, CalculateError, FinalResultError):
+        except (
+            exc.RoutingError,
+            exc.StandardizedError,
+            exc.FilterError,
+            exc.CalculateError,
+            exc.FormatError,
+        ):
             raise
-        except Exception as e:
-            raise ProcessIndicatorsError(
-                f"Process Inidicators Error Unknown, Name: {name}-{e}"
-            ) from e
+        except exc.ProcessingFailed:
+            logger.exception("Processing Indicator Failed for Name %s", name)
+            raise
 
     def filter_dates(
         self, raw_formatted_data: StandardizedResult, name: str, meta: BaseMetaModel
@@ -110,15 +100,16 @@ class IndicatorsProcessors:
         end_month = now.month
 
         try:
-            filter_date = DateProcessors.universal_date_filter(
+            filter_date = DateProcessors.date_filter(
                 raw_formatted_data,
                 start_year=meta.start_year,
                 start_month=meta.start_month,
                 end_year=end_year,
                 end_month=end_month,
             )
-        except Exception as e:
-            raise FilterError(f"Filter Dates Unknown Error Name: {name}-{e}") from e
+        except exc.FilterError:
+            logger.exception("Filter Dates Failed for Name %s", name)
+            raise
 
         return filter_date
 
@@ -149,23 +140,26 @@ class IndicatorsProcessors:
         data: list[FinalFormatItems] = []
         logger.info("=" * 50)
         logger.info("Format Result.. Proccesing (%s Data)", len(data_entry))
+        try:
+            if not frequency or frequency == "frequency":
+                raise exc.FormatError("frequency is required for ", name)
 
-        if not frequency or frequency == "frequency":
-            raise ValueError(f"Unknown Type Frequency in Final Result for name: {name}")
-
-        for date_key, value in data_entry.items():
-            date_obj = datetime.strptime(date_key, "%Y-%m-%d")
-            data.append(
-                FinalFormatItems(
-                    date=date_key,
-                    year=date_obj.year,
-                    indicator=name,
-                    country=country,
-                    category=category,
-                    value=value,
-                    frequency=frequency,
+            for date_key, value in data_entry.items():
+                date_obj = datetime.strptime(date_key, "%Y-%m-%d")
+                data.append(
+                    FinalFormatItems(
+                        date=date_key,
+                        year=date_obj.year,
+                        indicator=name,
+                        country=country,
+                        category=category,
+                        value=value,
+                        frequency=frequency,
+                    )
                 )
-            )
+        except exc.FormatError:
+            logger.exception("Format Result Failed for Name %s", name)
+            raise
         logger.info("Format Result... Done With (%s Data)", len(data))
         logger.debug("Final Result Data, example %s", data[:10])
 

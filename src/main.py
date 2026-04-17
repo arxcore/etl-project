@@ -5,9 +5,8 @@ import sys
 from typing import Optional
 import traceback
 from pipeline.processors.indicator import FinalFormatResult, IndicatorsProcessors
-from pipeline.processors.parse import ParseProcessors
-from pipeline.processors.raw import RawProcessors
 from pipeline.processors.standardized import StandardizerProcessors
+from pipeline.routing import RawProcessors, ParseProcessors
 from upload.postegres.psql import upload_to_db
 from config.metadata import ALL_INDICATORS
 from monitoring.base_logging.logger import configure_logging
@@ -144,7 +143,7 @@ async def main() -> FinalFormatResult | None:
             apply_log_level(target_level)
 
     except Exception as e:
-        logger.error("Errors setup logs: %s", e, exc_info=True)
+        logger.exception("Errors setup logging: %s", e, exc_info=True)
     # List of Indicators Availabel on Config Data
     if args.list:
         print("List Available Indicators:")
@@ -205,7 +204,7 @@ async def main() -> FinalFormatResult | None:
             len(data.format_result) if data is not None else 0,
         )
 
-    except Exception as e:
+    except exc.PipelineCrash as e:
         logger.exception("Error during execution pipeline: %s", e)
         print(f"\nFull traceback: {traceback.format_exc()}")
         sys.exit(1)

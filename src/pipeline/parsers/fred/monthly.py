@@ -3,12 +3,9 @@ from pipeline.routing import BaseParseReturn
 import logging
 from pipeline.parsers.registry import register, Providers, Frequency
 from pipeline.routing.model import BaseFetcherReturn
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class ErrorConvertValue(Exception):
-    pass
 
 
 @register(Providers.fred, Frequency.monthly)
@@ -26,8 +23,11 @@ def parse_monthly_fred(data: BaseFetcherReturn) -> BaseParseReturn:
         try:
             result[entry.date] = float(entry.value)
         except ValueError as e:
-            raise ErrorConvertValue(
-                f"canot convert value for date: {entry.date}"
-            ) from e
+            logger.error(f"canot convert value for date: {entry.date} {e}")
+            continue
+        except exc.FREDParserError:
+            logger.exception("Parsing FRED Unknown ERROR")
+            raise
+
     logger.debug("Parsing Done with (%s Data)", len(result))
     return BaseParseReturn(parse_result=result)

@@ -3,13 +3,9 @@ from pipeline.routing import BaseParseReturn
 from providers.bls.model import BLSSeries
 from pipeline.parsers.registry import register, Providers, Frequency
 from pipeline.routing.model import BaseFetcherReturn
-
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
-
-
-class ParseError(Exception):
-    pass
 
 
 @register(Providers.bls, Frequency.monthly)
@@ -69,12 +65,13 @@ def parse_monthly_bls(data: BaseFetcherReturn) -> BaseParseReturn:
                     parse_data[date_key] = value
 
                 except ValueError as e:
-                    logger.warning("Skipping Parsing data: %s", e)
+                    logger.error("Skipping Parsing data: %s", e)
                     # contoh: 300 valid, 1 error = skip 1 eror dan lanjut
                     continue
 
-    except Exception as e:
-        raise ParseError(f"PARSING MONTHLY BLS Unknown ERROR {e}") from e
+    except exc.BLSParserError:
+        logger.exception("PARSING MONTHLY BLS Unknown ERROR")
+        raise
 
     logger.debug("Final Parsing Accept (%s data)", len(parse_data))
 

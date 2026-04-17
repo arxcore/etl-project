@@ -5,6 +5,7 @@ from providers.bea import BEAProvider
 from providers import BaseMetaModel
 from pipeline.routing import BaseFetcherReturn
 import logging
+import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,11 @@ class RawProcessors:
         )
         logger.info("=" * 50)
         if meta.api not in self.providers:
-            # TODO: refactore with exception hierarky patern
-            raise ValueError(f"Source {meta.id} not Found")
+            raise KeyError(f"Source {meta.api} not Found")
         try:
             providers_cls = self.providers[meta.api]
             raw_data = await providers_cls.fetch_data(meta)
             return BaseFetcherReturn(api_type=meta.api, fetch_result=raw_data)
-        except Exception as e:
-            # TODO:
-            logger.error("Error Fetch Data from Source %s, %s", meta.api, e)
+        except exc.FetchDataError:
+            logger.exception("Error Fetch Data from Source %s", meta.api)
             raise

@@ -29,7 +29,7 @@ class DateProcessors:
                 )
 
     @staticmethod
-    def universal_date_filter(
+    def date_filter(
         data: StandardizedResult,
         start_year: int,
         start_month: int,

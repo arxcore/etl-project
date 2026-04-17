@@ -16,44 +16,62 @@ class RoutingError(ProcessingFailed):
     pass
 
 
-class FetchError(RoutingError):
+class FetchDataError(RoutingError):
     """catch Fetching process Error"""
 
     pass
 
 
-class BLSError(FetchError):
+class RateLimit(FetchDataError):
     pass
 
 
-class BEAError(FetchError):
+class AuthenticationError(FetchDataError):
     pass
 
 
-class FREDError(FetchError):
+class BLSRequestsError(FetchDataError):
     pass
 
 
-class ParseError(RoutingError):
-    """catch Parsing process Error"""
+class BEARequestsError(FetchDataError):
+    pass
+
+
+class FREDRequestsError(FetchDataError):
+    pass
+
+
+class ParseDataError(RoutingError):
+    """catch Parser process Error"""
 
     pass
 
 
-class BLSParseError(ParseError):
+class BLSParserError(ParseDataError):
     pass
 
 
-class BEAParseError(ParseError):
+class BEAParserError(ParseDataError):
     pass
 
 
-class FREDParseError(ParseError):
+class FREDParserError(ParseDataError):
     pass
 
 
 class StandardizedError(ProcessingFailed):
     """catch Error Standardizer data"""
+
+    pass
+
+
+class InvalidStandardized(StandardizedError):
+    pass
+
+
+class ResultsNotFound(ProcessingFailed):
+    """catch Error Results Data"""
 
     pass
 
