@@ -16,12 +16,16 @@ class RawProcessors:
     def __init__(self, resource: Resources | None = None):
         self.resource = resource or Resources()
         self.providerd = {
-            "bea": BEAProvider(api_key=self.resource.bea_api_key),
             "bls": BLSProvider(api_key=self.resource.bls_api_key),
+            "bea": BEAProvider(api_key=self.resource.bea_api_key),
             "fred": FREDProvider(api_key=self.resource.fred_api_key),
         }
 
     async def __aenter__(self):
+        # TODO:
+        # Implement a better way to handle multiple provider session opening and closing
+        # Currently, if one provider fails to open, it will close all previously opened sessions. This can be improved by implementing a more robust error handling mechanism.
+        # sequentinel session oppening--bootleneck, refactor and move to parallel session opening with asyncio.gather and handle exceptions accordingly
         open_session: list[str] = []
         for p in self.providerd:
             try:

@@ -26,7 +26,7 @@ class Orchest:
 
     async def __aexit__(
         self,
-        exc_type: type[BaseException | None],
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: object | None,
     ):
@@ -39,13 +39,10 @@ class Orchest:
         # TODO:
         # add Semaphore
         # rate limit handling
-        # handling max concurrent
         # DB Traking
-        # Orchestrator loop Flow if data == db skip fetch else fetch data
-        # log request per providers
-        # add TaskGroup
 
         tasks: list[Coroutine[Any, Any, FinalFormatResult]] = []
+        sem = asyncio.Semaphore(5)  # Limit the number of concurrent tasks to 5
 
         try:
             for country, categories in ALL_INDICATORS.items():
@@ -59,9 +56,10 @@ class Orchest:
                             )
                         )
 
-            results: list[FinalFormatResult | BaseException] = await asyncio.gather(
-                *tasks, return_exceptions=True
-            )
+            async with sem:
+                results: list[FinalFormatResult | BaseException] = await asyncio.gather(
+                    *tasks, return_exceptions=True
+                )
 
             data: list[FinalFormatItems] = []
 

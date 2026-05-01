@@ -35,8 +35,6 @@ class FinalFormatResult(BaseModel):
 class IndicatorsProcessors:
     """Handling Process indicators"""
 
-    # NOTE:
-    # review this class
     def __init__(
         self,
         raw_processors: RawProcessors,
@@ -64,7 +62,6 @@ class IndicatorsProcessors:
         self, name: str, meta: BaseMetaModel, category: str, country: str
     ) -> FinalFormatResult:
         """Main Process ETL indicatros"""
-
         try:
             # step 1. Raw Data
             # WARN:
