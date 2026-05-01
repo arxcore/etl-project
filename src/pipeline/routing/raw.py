@@ -15,11 +15,37 @@ class RawProcessors:
 
     def __init__(self, resource: Resources | None = None):
         self.resource = resource or Resources()
-        self.providers = {
-            "bls": BLSProvider(self.resource.bls_api_key),
-            "fred": FREDProvider(self.resource.fred_api_key),
-            "bea": BEAProvider(self.resource.bea_api_key),
+        self.providerd = {
+            "bea": BEAProvider(api_key=self.resource.bea_api_key),
+            "bls": BLSProvider(api_key=self.resource.bls_api_key),
+            "fred": FREDProvider(api_key=self.resource.fred_api_key),
         }
+
+    async def __aenter__(self):
+        open_session: list[str] = []
+        for p in self.providerd:
+            try:
+                await self.providerd[p].__aenter__()
+                open_session.append(p)
+            except Exception:
+                for o in reversed(open_session):
+                    await self.providerd[o].__aexit__(None, None, None)
+                logger.exception("Error Opening Provider %s", p)
+                raise
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None:
+        for p in self.providerd:
+            try:
+                await self.providerd[p].__aexit__(exc_type, exc_val, exc_tb)
+            except Exception:
+                logger.exception("Error Closing Provider %s", p)
+                continue
 
     async def process_raw_data(self, meta: BaseMetaModel) -> BaseFetcherReturn:
         """Fetch Raw Data from ALL Prioviders"""
@@ -32,12 +58,13 @@ class RawProcessors:
             meta.freq,
         )
         logger.info("=" * 50)
-        if meta.api not in self.providers:
+        if meta.api not in self.providerd:
             raise KeyError(f"Source {meta.api} not Found")
         try:
-            providers_cls = self.providers[meta.api]
+            providers_cls = self.providerd[meta.api]
             raw_data = await providers_cls.fetch_data(meta)
             return BaseFetcherReturn(api_type=meta.api, fetch_result=raw_data)
+
         except exc.FetchDataError:
             logger.exception("Error Fetch Data from Source %s", meta.api)
             raise

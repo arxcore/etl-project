@@ -26,6 +26,7 @@ class StandardizerProcessors:
     def process_standardized_data(
         parsed: BaseParseReturn, meta: BaseMetaModel, name: str
     ) -> StandardizedResult:
+
         result: dict[str, StandardizedItems] = {}
         error: list[str] = []
         try:
@@ -61,4 +62,5 @@ class StandardizerProcessors:
         except exc.StandardizedError:
             logger.exception("Standardized Proccess Failed")
             raise
+
         return StandardizedResult(standardized_data=result)

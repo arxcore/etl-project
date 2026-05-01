@@ -14,6 +14,7 @@ from pipeline.routing import (
 )
 import monitoring.exc_models as exc
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +47,18 @@ class IndicatorsProcessors:
         self.parse = parse_processors or ParseProcessors()
         self.standardized = standardizer
 
+    async def __aenter__(self):
+        await self.raw.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ):
+        await self.raw.__aexit__(exc_type, exc_val, exc_tb)
+
     # ETL Procesed indicators
     async def process_indicators(
         self, name: str, meta: BaseMetaModel, category: str, country: str
@@ -54,6 +67,8 @@ class IndicatorsProcessors:
 
         try:
             # step 1. Raw Data
+            # WARN:
+            # call without context manager ???
             raw_process: BaseFetcherReturn = await self.raw.process_raw_data(meta)
 
             # step 2. parse data
@@ -76,14 +91,6 @@ class IndicatorsProcessors:
             )
 
             return final_result
-        except (
-            exc.RoutingError,
-            exc.StandardizedError,
-            exc.FilterError,
-            exc.CalculateError,
-            exc.FormatError,
-        ):
-            raise
         except exc.ProcessingFailed:
             logger.exception("Processing Indicator Failed for Name %s", name)
             raise
@@ -141,9 +148,6 @@ class IndicatorsProcessors:
         logger.info("=" * 50)
         logger.info("Format Result.. Proccesing (%s Data)", len(data_entry))
         try:
-            if not frequency or frequency == "frequency":
-                raise exc.FormatError("frequency is required for ", name)
-
             for date_key, value in data_entry.items():
                 date_obj = datetime.strptime(date_key, "%Y-%m-%d")
                 data.append(

@@ -173,24 +173,25 @@ async def main() -> FinalFormatResult | None:
 
     data: FinalFormatResult | None = None
     try:
-        # Run Single Indicator
-        if args.run == "single":
-            logger.info("=" * 50)
-            logger.info(
-                "Run Single Indicator with country: %s | name: %s",
-                args.country,
-                args.name,
-            )
-            data = await orchest.run_by_single(args.country, args.name)
+        async with orchest as orch:
+            # Run Single Indicator
+            if args.run == "single":
+                logger.info("=" * 50)
+                logger.info(
+                    "Run Single Indicator with country: %s | name: %s",
+                    args.country,
+                    args.name,
+                )
+                data = await orch.run_by_single(args.country, args.name)
 
-        # Default Mode Run Pipeline
-        elif args.run == "all":
-            logger.info("Run ALL Config Indicators")
-            data = await orchest.run_all()
+            # Default Mode Run Pipeline
+            elif args.run == "all":
+                logger.info("Run ALL Config Indicators")
+                data = await orch.run_all()
 
         # store data to db
         if args.upload and data is not None:
-            await upload_to_db(data)  # upload_to_db(data)
+            await upload_to_db(data)
 
             logger.info(
                 "Upload Data To Postgres with  (%s Data) ",

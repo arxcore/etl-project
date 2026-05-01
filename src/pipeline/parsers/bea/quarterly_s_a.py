@@ -39,9 +39,9 @@ def parse_qsa_bea(data: BaseFetcherReturn) -> BaseParseReturn:
         except ValueError as e:
             logger.error(f"Parse Error for data: {date} with value: {str_value}-{e}")
             continue
-        except exc.BEAParserError:
-            logger.exception("Parsing BEA QSA Unknown ERROR")
-            raise
+
+        except Exception as e:
+            raise exc.BEAParserError(f"Parsing BEA QSA Unknown ERROR {e}") from e
 
     logger.debug(
         "Parse data BEA QSA Done Sampl data  %s",

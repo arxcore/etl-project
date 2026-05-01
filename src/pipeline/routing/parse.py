@@ -1,6 +1,6 @@
 from pipeline.routing import BaseFetcherReturn, BaseParseReturn
 import logging
-from pipeline.parsers import PARSE_REGISTER
+from pipeline.parsers.registry import PARSE_REGISTER
 import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
@@ -15,14 +15,16 @@ class ParseProcessors:
         """Process Parse Data by api Type"""
         logger.info("=" * 50)
 
-        if api not in PARSE_REGISTER:
-            raise KeyError(f"api {api} not found in register parse")
-
-        elif freq not in PARSE_REGISTER[api]:
-            raise KeyError(f"freq {freq} not found in register parse for api {api}")
         try:
+            if api not in PARSE_REGISTER:
+                raise exc.RoutingError(f"api {api} not found in register parse")
+
+            elif freq not in PARSE_REGISTER[api]:
+                raise exc.RoutingError(
+                    f"freq {freq} not found in register parse for api {api}"
+                )
             parsed = PARSE_REGISTER[api][freq]
             return parsed(raw_data)
-        except exc.ParseDataError:
-            logger.exception(f"api {api} not found in register parse")
+        except exc.RoutingError:
+            logger.exception("Routing failed for api %s freq %s", api, freq)
             raise

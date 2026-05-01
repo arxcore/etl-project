@@ -20,6 +20,18 @@ class Orchest:
     def __init__(self, indicator_processor: IndicatorsProcessors):
         self.processors = indicator_processor
 
+    async def __aenter__(self):
+        await self.processors.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException | None],
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ):
+        await self.processors.__aexit__(exc_type, exc_val, exc_tb)
+
     async def run_all(self) -> FinalFormatResult | None:
         """
         Running ALLConfig Data
@@ -28,6 +40,10 @@ class Orchest:
         # add Semaphore
         # rate limit handling
         # handling max concurrent
+        # DB Traking
+        # Orchestrator loop Flow if data == db skip fetch else fetch data
+        # log request per providers
+        # add TaskGroup
 
         tasks: list[Coroutine[Any, Any, FinalFormatResult]] = []
 
@@ -37,16 +53,11 @@ class Orchest:
                     for indicators_name, meta in indicators.items():
                         # indicator: US_NFP, Unemploy
                         # meta: url, id, calc, dst..``
-                        try:
-                            tasks.append(
-                                self.processors.process_indicators(
-                                    indicators_name, meta, category, country
-                                )
+                        tasks.append(
+                            self.processors.process_indicators(
+                                indicators_name, meta, category, country
                             )
-                        except exc.ProcessingFailed:
-                            logger.exception("Failed to Procesed Indicators")
-                            logger.warning("skippping Indicator %s", indicators_name)
-                            continue
+                        )
 
             results: list[FinalFormatResult | BaseException] = await asyncio.gather(
                 *tasks, return_exceptions=True
@@ -62,8 +73,9 @@ class Orchest:
                     continue
                 elif isinstance(result, FinalFormatResult):
                     data.extend(result.format_result)
-                    logger.info("Orchestrator...done (%s Data)", len(data))
-                    return FinalFormatResult(format_result=data)
+
+            logger.info("Orchestrator...done (%s Data)", len(data))
+            return FinalFormatResult(format_result=data)
         except exc.PipelineCrash:
             logger.exception("Pipeline process carsh during operation")
             raise

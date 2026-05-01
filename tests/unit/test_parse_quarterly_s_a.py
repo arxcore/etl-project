@@ -1,9 +1,9 @@
-from src.pipeline.parsers.bea import parse_qsa_bea, ParseError
-from src.providers.bea.model import BEARawRespons, BEAapi, BEAField, BEAResult
-import pytest
+from pipeline.parsers.bea import parse_qsa_bea
+from providers.bea.model import BEARawRespons, BEAapi, BEAField, BEAResult
+from pipeline.routing import BaseFetcherReturn
 
 
-def test_pars_qsa_bea():
+def test_pars_qsa_bea_succs():
     fake_data = BEARawRespons(
         BEAAPI=BEAapi(
             Results=BEAResult(
@@ -15,14 +15,15 @@ def test_pars_qsa_bea():
             )
         )
     )
-    result = parse_qsa_bea(fake_data)
+    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bea")
+    result = parse_qsa_bea(data)
     assert result.parse_result["2020-06-01"] == 200187
     assert "2020-09-01" not in result.parse_result
     assert result.parse_result["2020-12-01"] == 200387
 
 
-def test_pars_qsa_bea_raise_error():
-    bad_data = BEARawRespons(
+def test_pars_qsa_bea_bad():
+    fake_data = BEARawRespons(
         BEAAPI=BEAapi(
             Results=BEAResult(
                 Data=[
@@ -33,12 +34,15 @@ def test_pars_qsa_bea_raise_error():
             )
         )
     )
-    with pytest.raises(ParseError):
-        parse_qsa_bea(bad_data)
+    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bea")
+    result = parse_qsa_bea(data)
+    assert "2020-06-01" not in result.parse_result
+    assert "2020-09-01" not in result.parse_result
+    assert "2020-12-01" not in result.parse_result
 
 
 def test_pars_qsa_bea_with_negative_values():
-    negative_value_data = BEARawRespons(
+    fake_data = BEARawRespons(
         BEAAPI=BEAapi(
             Results=BEAResult(
                 Data=[
@@ -48,6 +52,7 @@ def test_pars_qsa_bea_with_negative_values():
             )
         )
     )
-    result = parse_qsa_bea(negative_value_data)
+    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bea")
+    result = parse_qsa_bea(data)
     assert result.parse_result["2021-03-01"] == -12345
     assert result.parse_result["2021-06-01"] == 67890

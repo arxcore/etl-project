@@ -25,9 +25,8 @@ def parse_monthly_fred(data: BaseFetcherReturn) -> BaseParseReturn:
         except ValueError as e:
             logger.error(f"canot convert value for date: {entry.date} {e}")
             continue
-        except exc.FREDParserError:
-            logger.exception("Parsing FRED Unknown ERROR")
-            raise
+        except Exception as e:
+            raise exc.FREDParserError(f"Parsing FRED Unknown ERROR {e}") from e
 
     logger.debug("Parsing Done with (%s Data)", len(result))
     return BaseParseReturn(parse_result=result)
