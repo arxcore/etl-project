@@ -1,9 +1,9 @@
 from typing import Callable
-from pipeline.routing.model import BaseFetcherReturn, BaseParseReturn
+from pipeline.routing.model import FinalresultFetcher, FinalresultParse
 from enum import Enum
 
 # CONSTANT
-FUNCTION = Callable[[BaseFetcherReturn], BaseParseReturn]
+FUNCTION = Callable[[FinalresultFetcher], FinalresultParse]
 PARSE_REGISTER: dict[str, dict[str, FUNCTION]] = {}
 
 

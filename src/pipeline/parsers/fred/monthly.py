@@ -1,16 +1,16 @@
 from providers.fred import FREDRawResponse
-from pipeline.routing import BaseParseReturn
+from pipeline.routing import FinalresultParse
 import logging
 from pipeline.parsers.registry import register, Providers, Frequency
-from pipeline.routing.model import BaseFetcherReturn
+from pipeline.routing.model import FinalresultFetcher
 import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
 
 @register(Providers.fred, Frequency.monthly)
-def parse_monthly_fred(data: BaseFetcherReturn) -> BaseParseReturn:
-    # Validation BaseFetcherReturn
+def parse_monthly_fred(data: FinalresultFetcher) -> FinalresultParse:
+    # Validation FinalresultFetcher
     RAW_DATA = FREDRawResponse.model_validate(data.fetch_result)
 
     logger.debug("FRED Parsing Accept (%s Data)", len(RAW_DATA.observations))
@@ -29,4 +29,4 @@ def parse_monthly_fred(data: BaseFetcherReturn) -> BaseParseReturn:
             raise exc.FREDParserError(f"Parsing FRED Unknown ERROR {e}") from e
 
     logger.debug("Parsing Done with (%s Data)", len(result))
-    return BaseParseReturn(parse_result=result)
+    return FinalresultParse(parse_result=result)

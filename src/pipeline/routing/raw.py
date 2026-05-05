@@ -3,7 +3,7 @@ from providers.bls import BLSProvider
 from providers.fred import FREDProvider
 from providers.bea import BEAProvider
 from providers import BaseMetaModel
-from pipeline.routing import BaseFetcherReturn
+from pipeline.routing import FinalresultFetcher
 import logging
 import monitoring.exc_models as exc
 
@@ -51,10 +51,10 @@ class RawProcessors:
                 logger.exception("Error Closing Provider %s", p)
                 continue
 
-    async def process_raw_data(self, meta: BaseMetaModel) -> BaseFetcherReturn:
+    async def process_raw_data(self, meta: BaseMetaModel) -> FinalresultFetcher:
         """Fetch Raw Data from ALL Prioviders"""
         logger.info("=" * 50)
-        logger.info("Fetch Raw Data From %s |  ApiID %s", meta.api, meta.id)
+        logger.info("Fetch Raw Data From %s | ID %s", meta.api.upper(), meta.id)
         logger.info(
             "Start Year %s Month %s Frequency %s",
             meta.start_year,
@@ -67,7 +67,7 @@ class RawProcessors:
         try:
             providers_cls = self.providerd[meta.api]
             raw_data = await providers_cls.fetch_data(meta)
-            return BaseFetcherReturn(api_type=meta.api, fetch_result=raw_data)
+            return FinalresultFetcher(source=meta.api, fetch_result=raw_data)
 
         except exc.FetchDataError:
             logger.exception("Error Fetch Data from Source %s", meta.api)

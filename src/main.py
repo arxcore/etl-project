@@ -4,10 +4,10 @@ import logging
 import sys
 from typing import Optional
 import traceback
-from pipeline.processors.indicator import FinalFormatResult, IndicatorsProcessors
-from pipeline.processors.standardized import StandardizerProcessors
+from pipeline.processors.indicator import StagingData, IndicatorsProcessors
 from pipeline.routing import RawProcessors, ParseProcessors
-from upload.postegres.psql import upload_to_db
+
+# from upload.postegres.psql import upload_to_db
 from config.metadata import ALL_INDICATORS
 from monitoring.base_logging.logger import configure_logging
 from pipeline.orchestrator import Orchest
@@ -60,6 +60,7 @@ def valid_input(
 
 
 def resolve_log_level(level_str: str) -> int:
+    """Resolve Log Level String to Log Level Int"""
     level_mapping = {
         "debug": logging.DEBUG,
         "info": logging.INFO,
@@ -74,6 +75,7 @@ def resolve_log_level(level_str: str) -> int:
 
 
 def level_name(log_level: int) -> str:
+    """Get Log Level Name from Log Level Int"""
     level_names = {
         logging.DEBUG: "DEBUG",
         logging.INFO: "INFO",
@@ -89,6 +91,7 @@ def level_name(log_level: int) -> str:
 
 
 def apply_log_level(log_level: int) -> None:
+    """Apply Log Level to Logger and Print Log Level Name"""
     log_name: str = level_name(log_level)
 
     configure_logging(log_level)
@@ -96,14 +99,15 @@ def apply_log_level(log_level: int) -> None:
 
 
 def build_injection() -> Orchest:
+    """Build Dependency Injection for Pipeline"""
+
     procc_raw = RawProcessors()
-    procc_standardizer = StandardizerProcessors()
     procc_parse = ParseProcessors()
-    procc_indicator = IndicatorsProcessors(procc_raw, procc_parse, procc_standardizer)
+    procc_indicator = IndicatorsProcessors(procc_raw, procc_parse)
     return Orchest(procc_indicator)
 
 
-async def main() -> FinalFormatResult | None:
+async def main() -> StagingData | None:
     """Main Execute command line pipeline"""
     parse = argparse.ArgumentParser()
     main_group = parse.add_argument_group("structure data")
@@ -130,10 +134,10 @@ async def main() -> FinalFormatResult | None:
     run_mode.add_argument(
         "--list", action="store_true", help="list of available indicators"
     )
-    upload = parse.add_argument_group("Upload To DataBase")
-    upload.add_argument(
-        "-u", "--upload", action="store_true", help="Upload data to PostgreSQL"
-    )
+    # upload = parse.add_argument_group("Upload To DataBase")
+    # upload.add_argument(
+    # "-u", "--upload", action="store_true", help="Upload data to PostgreSQL"
+    # )
     args = parse.parse_args()
 
     # setup logging
@@ -171,7 +175,7 @@ async def main() -> FinalFormatResult | None:
     # Execute Pipeline
     orchest: Orchest = build_injection()
 
-    data: FinalFormatResult | None = None
+    data: StagingData | None = None
     try:
         async with orchest as orch:
             # Run Single Indicator
@@ -190,19 +194,19 @@ async def main() -> FinalFormatResult | None:
                 data = await orch.run_all()
 
         # store data to db
-        if args.upload and data is not None:
-            await upload_to_db(data)
+        # if args.upload and data is not None:
+        # await upload_to_db(data)
 
-            logger.info(
-                "Upload Data To Postgres with  (%s Data) ",
-                len(data.format_result),
-            )
+        # logger.info(
+        # "Upload Data To Postgres with  (%s Data) ",
+        # len(data.staging_result),
+        # )
 
         # Summary Final Results Pipeline Data
         logger.info("=" * 50)
         logger.info(
             "Final Data Records (%s Data)",
-            len(data.format_result) if data is not None else 0,
+            len(data.staging_result) if data is not None else 0,
         )
 
     except exc.PipelineCrash as e:

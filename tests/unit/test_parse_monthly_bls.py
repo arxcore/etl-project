@@ -1,6 +1,6 @@
 from pipeline.parsers import parse_monthly_bls
 from providers.bls.model import BLSSeries, BLSResult, BLSRawData, BLSFootnotes
-from pipeline.routing import BaseFetcherReturn
+from pipeline.routing import FinalresultFetcher
 
 
 def test_parse_monthly_bls_happy_path():
@@ -29,7 +29,7 @@ def test_parse_monthly_bls_happy_path():
             )
         ]
     )
-    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bls")
+    data = FinalresultFetcher(fetch_result=fake_data, source="bls")
 
     result = parse_monthly_bls(data)
 
@@ -63,7 +63,7 @@ def test_parse_monthly_bls_skip_invalid_value():
             )
         ]
     )
-    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bls")
+    data = FinalresultFetcher(fetch_result=fake_data, source="bls")
 
     result = parse_monthly_bls(data)
 
@@ -97,7 +97,7 @@ def test_parse_monthly_bls_skip_non_monthly():
             )
         ]
     )
-    data = BaseFetcherReturn(fetch_result=fake_data, api_type="bls")
+    data = FinalresultFetcher(fetch_result=fake_data, source="bls")
 
     result = parse_monthly_bls(data)
 

@@ -1,4 +1,4 @@
-from pipeline.routing import BaseFetcherReturn, BaseParseReturn
+from pipeline.routing import FinalresultFetcher, FinalresultParse
 import logging
 from pipeline.parsers.registry import PARSE_REGISTER
 import monitoring.exc_models as exc
@@ -10,8 +10,8 @@ class ParseProcessors:
     """Handling Parse Data with Diverent Frequency"""
 
     def __call__(
-        self, raw_data: BaseFetcherReturn, api: str, freq: str | None = None
-    ) -> BaseParseReturn:
+        self, raw_data: FinalresultFetcher, api: str, freq: str | None = None
+    ) -> FinalresultParse:
         """Process Parse Data by api Type"""
         logger.info("=" * 50)
 

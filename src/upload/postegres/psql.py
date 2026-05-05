@@ -1,4 +1,3 @@
-from datetime import datetime
 import psycopg2
 import logging
 from contextlib import contextmanager
@@ -58,7 +57,8 @@ async def upload_to_db(data: FinalFormatResult):
                     item.category,
                     item.value,
                     item.frequency,
-                    datetime.now().isoformat(),
+                    item.processed,
+                    # datetime.now().isoformat(),
                 )
                 for item in data.format_result
             ]

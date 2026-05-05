@@ -1,7 +1,6 @@
 from pipeline.parsers.fred.monthly import parse_monthly_fred
 from providers.fred import FREDRawResponse, Observation
-import pytest
-from pipeline.routing import BaseFetcherReturn
+from pipeline.routing import FinalresultFetcher
 
 
 def test_parse_monthly_fred_missing_data():
@@ -13,7 +12,7 @@ def test_parse_monthly_fred_missing_data():
             Observation(date="2025-11-01", value="-"),
         ]
     )
-    data = BaseFetcherReturn(fetch_result=fake_data, api_type="fred")
+    data = FinalresultFetcher(fetch_result=fake_data, source="fred")
 
     result = parse_monthly_fred(data)
     assert "2025-11-01" not in result.parse_result
@@ -29,8 +28,7 @@ def test_parse_monthly_fred_error_convert_value():
             Observation(date="2025-05-01", value="/"),
         ]
     )
-    data = BaseFetcherReturn(fetch_result=bad_data, api_type="fred")
+    data = FinalresultFetcher(fetch_result=bad_data, source="fred")
     result = parse_monthly_fred(data)
     assert "2021-01-01" not in result.parse_result
     assert "2025-05-01" not in result.parse_result
-

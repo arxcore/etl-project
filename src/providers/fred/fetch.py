@@ -1,6 +1,5 @@
 from datetime import datetime
 import logging
-
 from pydantic import ValidationError
 from providers import BaseMetaModel
 from providers.fred.model import FREDRawResponse
@@ -14,15 +13,17 @@ from tenacity import (
 import monitoring.exc_models as exc
 from providers.retry_http import Retryable
 from typing import Callable, cast
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class FREDProvider:
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, limit_requests: int = 5):
         self.api_key = api_key
         self.url = "https://api.stlouisfed.org/fred/series/observations"
         self.session: aiohttp.ClientSession | None = None
+        self.semaphore = asyncio.Semaphore(limit_requests)  # Limit concurrent requests
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -48,7 +49,7 @@ class FREDProvider:
 
         # chekc api key
         if not self.api_key:
-            raise exc.ResourceNotFound(f"Api Key not found for name: {meta.api}")
+            raise exc.ResourceNotFound(f"Apikey not found for {meta.api}")
 
         # build starr year and month
         start_year = f"{meta.start_year}-{meta.start_month:02d}-01"
@@ -65,41 +66,53 @@ class FREDProvider:
             "observation_end": end_year,
             "sort_order": "desc",
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                self.url, params=params, timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                # 4xx, 5xx
-                response.raise_for_status()
+        if not self.session:
+            raise exc.FREDRequestsError("HTTP FRED Session not initialized")
 
-                logger.info("FRED Return Status Codea: %s", response.status)
+        try:
+            async with self.semaphore:
+                async with self.session.get(
+                    self.url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    # 4xx, 5xx
+                    response.raise_for_status()
 
-                # 1xx, 3xx, etc..
-                if response.status != 200:
-                    raise exc.FREDRequestsError("Unexpected Error Responns")
-                try:
-                    data = await response.json()
+                    # 1xx, 3xx, etc..
+                    if response.status != 200:
+                        raise exc.FREDRequestsError(
+                            "Unexpected Error Responns %s", response.status
+                        )
 
-                    # WARNING:
-                    # Find out more about the error message in this “error_code”
-                    if "error_code" in data:
-                        error_msg = data.get("error_message", "Unknown Error")
-                        logger.error("FRED API Error: %s", error_msg)
+                    logger.info("FRED Return Status Code: %s", response.status)
 
-                        if data.get("error_code") == 429:
-                            raise exc.RateLimit(f"Ratelimit requests: {error_msg}")
-                        elif data.get("error_code") == 401:
-                            raise exc.AuthenticationError(
-                                f"Authentication error from requests: {error_msg} "
-                            )
-                        else:
+                    try:
+                        data = await response.json()
+
+                        # WARNING:
+                        # Find out more about the error message in this “error_code”
+                        if "error_code" in data:
+                            error_msg = data.get("error_message", "Unknown Error")
+                            logger.error("FRED API Error: %s", error_msg)
+
                             raise exc.FREDRequestsError(
                                 f"Unknown FRED Requests Error {error_msg}"
                             )
 
-                    return FREDRawResponse.model_validate(data)
+                        return FREDRawResponse.model_validate(data)
 
-                except ValidationError as e:
-                    raise exc.FREDRequestsError(f"Validation Response Error {e}") from e
-                except aiohttp.ContentTypeError as e:
-                    raise exc.FREDRequestsError(f"Content Error {e}") from e
+                    except ValidationError as e:
+                        raise exc.FREDRequestsError(
+                            f"Validation Response Error {e}"
+                        ) from e
+                    except aiohttp.ContentTypeError as e:
+                        raise exc.FREDRequestsError(f"Content Error {e}") from e
+        except aiohttp.ClientResponseError as e:
+            if e.status == 429:
+                raise exc.RateLimit("Too Many Requests") from e
+            elif e.status == 401:
+                raise exc.AuthenticationError(
+                    "Authentication error from requests"
+                ) from e
+            raise exc.FREDRequestsError(f"HTTP Error {e.status}") from e
+        except aiohttp.ClientError as e:
+            raise exc.FREDRequestsError(f"HTTP Client Error {e}") from e

@@ -1,5 +1,5 @@
 import logging
-from pipeline.routing import BaseParseReturn, BaseFetcherReturn
+from pipeline.routing import FinalresultParse, FinalresultFetcher
 from providers.bls.model import BLSSeries
 from pipeline.parsers.registry import register, Providers, Frequency
 import monitoring.exc_models as exc
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 @register(Providers.bls, Frequency.monthly)
-def parse_monthly_bls(data: BaseFetcherReturn) -> BaseParseReturn:
+def parse_monthly_bls(data: FinalresultFetcher) -> FinalresultParse:
     """
     Docstring for parse_monthly_bls
 
@@ -17,7 +17,7 @@ def parse_monthly_bls(data: BaseFetcherReturn) -> BaseParseReturn:
     Return dict[str, float]
     """
 
-    # Validation BaseFetcherReturn
+    # Validation FinalresultFetcher
     RAW_DATA = BLSSeries.model_validate(data.fetch_result)
 
     parse_data: dict[str, float] = {}
@@ -77,4 +77,4 @@ def parse_monthly_bls(data: BaseFetcherReturn) -> BaseParseReturn:
     if skip_value > 0:
         logger.info("[DEBUG SKIPING VALUE]  %s -> %s", skip_value, error)
 
-    return BaseParseReturn(parse_result=parse_data)
+    return FinalresultParse(parse_result=parse_data)

@@ -1,11 +1,8 @@
-from unittest import mock
-import aiohttp
 from pipeline.routing import RawProcessors
-import providers
+from unittest.mock import AsyncMock
 from providers.metamodel import BaseMetaModel
 import pytest
 from pytest_mock import MockerFixture
-from unittest.mock import AsyncMock, MagicMock, patch
 
 m1: BaseMetaModel = BaseMetaModel(
     id="CUUR0000SA0",

@@ -1,15 +1,15 @@
-from pipeline.routing import BaseParseReturn
+from pipeline.routing import FinalresultParse
 from providers.bea.model import BEARawRespons
 import logging
 from pipeline.parsers.registry import Frequency, Providers, register
-from pipeline.routing.model import BaseFetcherReturn
+from pipeline.routing.model import FinalresultFetcher
 import monitoring.exc_models as exc
 
 logger = logging.getLogger(__name__)
 
 
 @register(Providers.bea, Frequency.qsa)
-def parse_qsa_bea(data: BaseFetcherReturn) -> BaseParseReturn:
+def parse_qsa_bea(data: FinalresultFetcher) -> FinalresultParse:
     """
     Parse data QuarterlySeasonallyAdjusted
     Return dict[str, float]
@@ -50,4 +50,4 @@ def parse_qsa_bea(data: BaseFetcherReturn) -> BaseParseReturn:
 
     if missing_value:
         logger.warning("Total Missing value for data %s", len(missing_value))
-    return BaseParseReturn(parse_result=parse_data)
+    return FinalresultParse(parse_result=parse_data)

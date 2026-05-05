@@ -1,14 +1,10 @@
 from pydantic import BaseModel
-from pipeline.processors.standardized import StandardizedResult
-from pipeline.processors.date import DateProcessors, FilterDatesResult
-from pipeline.processors.standardized import StandardizerProcessors
-from pipeline.calculation import DataCalculation
-from datetime import datetime
+from datetime import datetime, timezone, date
 import logging
 from providers import BaseMetaModel
 from pipeline.routing import (
-    BaseFetcherReturn,
-    BaseParseReturn,
+    FinalresultFetcher,
+    FinalresultParse,
     RawProcessors,
     ParseProcessors,
 )
@@ -18,18 +14,26 @@ import monitoring.exc_models as exc
 logger = logging.getLogger(__name__)
 
 
-class FinalFormatItems(BaseModel):
-    date: str
+class StagingItems(BaseModel):
+    date: date
     year: int
+    source: str
+    code: str
     indicator: str
     country: str
     category: str
     value: float
     frequency: str
+    method: str
+    unit: str
+    processed: datetime
+    description: str
 
 
-class FinalFormatResult(BaseModel):
-    format_result: list[FinalFormatItems]
+class StagingData(BaseModel):
+    """Staging Data Model for Processed Indicators"""
+
+    staging_result: list[StagingItems]
 
 
 class IndicatorsProcessors:
@@ -39,11 +43,9 @@ class IndicatorsProcessors:
         self,
         raw_processors: RawProcessors,
         parse_processors: ParseProcessors,
-        standardizer: StandardizerProcessors,
     ):
         self.raw = raw_processors
         self.parse = parse_processors or ParseProcessors()
-        self.standardized = standardizer
 
     async def __aenter__(self):
         await self.raw.__aenter__()
@@ -60,108 +62,52 @@ class IndicatorsProcessors:
     # ETL Procesed indicators
     async def process_indicators(
         self, name: str, meta: BaseMetaModel, category: str, country: str
-    ) -> FinalFormatResult:
+    ) -> StagingData:
         """Main Process ETL indicatros"""
         try:
-            # step 1. Raw Data
-            # WARN:
-            # call without context manager ???
-            raw_process: BaseFetcherReturn = await self.raw.process_raw_data(meta)
+            #  Raw Data
+            raw_process: FinalresultFetcher = await self.raw.process_raw_data(meta)
 
-            # step 2. parse data
-            parsed_data: BaseParseReturn = self.parse(raw_process, meta.api, meta.freq)
+            #  parse data
+            parsed_data: FinalresultParse = self.parse(raw_process, meta.api, meta.freq)
 
-            # step 3. standarized
-            standardizer: StandardizedResult = (
-                self.standardized.process_standardized_data(parsed_data, meta, name)
-            )
-
-            # step 4. filter dates
-            filtered_dates = self.filter_dates(standardizer, name, meta)
-
-            # step 5. calculation
-            calculated = self.calculated_values(filtered_dates, name, meta)
-
-            # step 6. final result standarized
-            final_result = self.format_result(
-                calculated, name, meta.freq, category, country
-            )
-
-            return final_result
-        except exc.ProcessingFailed:
-            logger.exception("Processing Indicator Failed for Name %s", name)
-            raise
-
-    def filter_dates(
-        self, raw_formatted_data: StandardizedResult, name: str, meta: BaseMetaModel
-    ) -> FilterDatesResult:
-        """
-        Filter Dates
-        """
-        # build range end years data
-        now = datetime.now()
-        end_year = now.year
-        end_month = now.month
-
-        try:
-            filter_date = DateProcessors.date_filter(
-                raw_formatted_data,
-                start_year=meta.start_year,
-                start_month=meta.start_month,
-                end_year=end_year,
-                end_month=end_month,
-            )
-        except exc.FilterError:
-            logger.exception("Filter Dates Failed for Name %s", name)
-            raise
-
-        return filter_date
-
-    def calculated_values(
-        self, filter_date: FilterDatesResult, name: str, meta: BaseMetaModel
-    ) -> dict[str, float]:
-        """Calculation"""
-        logger.info("=" * 50)
-        logger.debug("Calculation Data..Proccesing")
-        logger.debug("Accept (%s Data)", len(filter_date.filtered_date))
-
-        method = str(meta.calc)
-        calc_handling = DataCalculation.calculated_router(filter_date, method, name)
-
-        logger.info("Calculation Data... Done")
-        logger.info("Accept (%s Data)", len(filter_date.filtered_date))
-        logger.debug("Sample Calculation Data %s", calc_handling)
-        return calc_handling
-
-    def format_result(
-        self,
-        data_entry: dict[str, float],
-        name: str,
-        frequency: str,
-        category: str,
-        country: str,
-    ) -> FinalFormatResult:
-        data: list[FinalFormatItems] = []
-        logger.info("=" * 50)
-        logger.info("Format Result.. Proccesing (%s Data)", len(data_entry))
-        try:
-            for date_key, value in data_entry.items():
-                date_obj = datetime.strptime(date_key, "%Y-%m-%d")
-                data.append(
-                    FinalFormatItems(
-                        date=date_key,
-                        year=date_obj.year,
-                        indicator=name,
-                        country=country,
-                        category=category,
-                        value=value,
-                        frequency=frequency,
-                    )
+            items: list[StagingItems] = [
+                StagingItems(
+                    date=date_obj.date(),
+                    year=date_obj.year,
+                    source=meta.api,
+                    code=meta.id,
+                    indicator=name,
+                    value=value,
+                    country=country,
+                    category=category,
+                    frequency=meta.freq,
+                    method=meta.calc,
+                    unit=meta.unit,
+                    description=meta.description,
+                    processed=datetime.now(timezone.utc),
                 )
-        except exc.FormatError:
-            logger.exception("Format Result Failed for Name %s", name)
-            raise
-        logger.info("Format Result... Done With (%s Data)", len(data))
-        logger.debug("Final Result Data, example %s", data[:10])
+                for date_key, value in parsed_data.parse_result.items()
+                # inner loop
+                # single-element tuple to parse date_key once, reuse for .date() and .year
+                for date_obj in (datetime.strptime(date_key, "%Y-%m-%d"),)
+            ]
+            logger.info("Staging data... Done With (%s Data)", len(items))
+            logger.debug("Data example %s", items[:10])
 
-        return FinalFormatResult(format_result=data)
+            return StagingData(staging_result=items)
+
+        except ValueError as e:
+            raise exc.FormatError(f"Initialized data Error, Name {name} {e}") from e
+        except TypeError as e:
+            raise exc.FormatError(
+                f"Initialized data Type Error, Name {name} {e}"
+            ) from e
+        except exc.ProcessingFailed:
+            logger.exception("Processing Failed for Name %s", name)
+            raise
+        except Exception as e:
+            logger.exception("Unexpected Error Processing Indicator for Name %s", name)
+            raise exc.ProcessingFailed(
+                f"Unexpected Error Processing Indicator for Name {name} {e}"
+            ) from e

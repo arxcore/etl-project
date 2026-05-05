@@ -13,16 +13,9 @@ from tenacity import (
 import monitoring.exc_models as exc
 from typing import Callable, cast
 from providers.retry_http import Retryable
+import asyncio
 
 logger = logging.getLogger(__name__)
-
-
-def is_retryable(error: Exception) -> bool:
-    if isinstance(error, aiohttp.ClientResponseError):
-        return error.status >= 500
-    return isinstance(
-        error, (aiohttp.ClientConnectionError, aiohttp.ServerTimeoutError)
-    )
 
 
 class BEAProvider:
@@ -35,10 +28,11 @@ class BEAProvider:
     "ResultFormat": "JSON",
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, limit_requests: int = 5):
         self.api_key = api_key
         self.url = "https://apps.bea.gov/api/data"
         self.session: aiohttp.ClientSession | None = None
+        self.semaphore = asyncio.Semaphore(limit_requests)  # Limit concurrent requests
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -64,7 +58,7 @@ class BEAProvider:
 
         # Check api key if not exists
         if not self.api_key:
-            raise exc.ResourceNotFound(f"ApiKey Not found for {meta.api}")
+            raise exc.ResourceNotFound(f"Apikey Not found for {meta.api}")
 
         # build Start year and end year
         start_range = list(range(meta.start_year, datetime.now().year + 1))
@@ -82,39 +76,55 @@ class BEAProvider:
             "ResultFormat": "JSON",
         }
 
-        if self.session is None:
-            raise RuntimeError("BEA Provider Session is None")
+        if not self.session:
+            raise exc.BEARequestsError("HTTP BEA Session is Not Initialized")
 
-        # aiiohttp Context Manager
-        async with self.session.get(
-            self.url, params=params, timeout=aiohttp.ClientTimeout(total=30)
-        ) as response:
-            # Retry if status code http >= 500
-            # 4xx, 5xx
-            response.raise_for_status()
+        try:
+            async with self.semaphore:
+                # aiiohttp Context Manager
+                async with self.session.get(
+                    self.url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    # Retry if status code http >= 500
+                    # 4xx, 5xx
+                    response.raise_for_status()
 
-            logger.info("BEA Response Status Code Return %s", response.status)
+                    # 1xx, 3xx, etc..
+                    if response.status != 200:
+                        raise exc.BEARequestsError(
+                            "Unexpected Error Respons %s", response.status
+                        )
 
-            # 1xx, 3xx, etc..
-            if response.status != 200:
-                raise exc.BEARequestsError("Unexpected Error Respons")
+                    logger.info("BEA Response Status Code Return %s", response.status)
 
-            try:
-                data = await response.json()
+                    try:
+                        data = await response.json()
 
-                logger.debug("BEA Raw Data: %s", data)
-                # Validate data
-                result = BEARawRespons.model_validate(data)
-                logger.info(
-                    "BEA Raw Data... Accept (%s data)",
-                    len(result.BEAAPI.Results.Data),
-                )
-                return result
-            except aiohttp.ContentTypeError as e:
-                # TODO:
-                # test if content type not json fromat
-                # wrap into providers handling
-                raise exc.BEARequestsError(f"Content Error {e}") from e
-            except ValidationError as e:
-                # wrap
-                raise exc.BEARequestsError(f"Validation Response Error {e}") from e
+                        logger.debug("BEA Raw Data: %s", data)
+                        # Validate data
+                        result = BEARawRespons.model_validate(data)
+                        logger.info(
+                            "BEA Raw Data... Accept (%s data)",
+                            len(result.BEAAPI.Results.Data),
+                        )
+                        return result
+                    except aiohttp.ContentTypeError as e:
+                        # TODO:
+                        # test if content type not json fromat
+                        # wrap into providers handling
+                        raise exc.BEARequestsError(f"Content Error {e}") from e
+                    except ValidationError as e:
+                        # wrap
+                        raise exc.BEARequestsError(
+                            f"Validation Response Error {e}"
+                        ) from e
+        except aiohttp.ClientResponseError as e:
+            if e.status == 429:
+                raise exc.RateLimit("Rate limit reached") from e
+            elif e.status == 401:
+                raise exc.AuthenticationError(
+                    "Authentication error from requests"
+                ) from e
+            raise exc.BEARequestsError(f"HTTP Error {e.status}") from e
+        except aiohttp.ClientError as e:
+            raise exc.BEARequestsError(f"HTTP Client Error {e}") from e

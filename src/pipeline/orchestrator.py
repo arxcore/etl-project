@@ -1,7 +1,7 @@
 import asyncio
 from pipeline.processors.indicator import (
-    FinalFormatItems,
-    FinalFormatResult,
+    StagingItems,
+    StagingData,
     IndicatorsProcessors,
 )
 import logging
@@ -19,6 +19,7 @@ class Orchest:
 
     def __init__(self, indicator_processor: IndicatorsProcessors):
         self.processors = indicator_processor
+        # load to database here after finish result
 
     async def __aenter__(self):
         await self.processors.__aenter__()
@@ -32,19 +33,17 @@ class Orchest:
     ):
         await self.processors.__aexit__(exc_type, exc_val, exc_tb)
 
-    async def run_all(self) -> FinalFormatResult | None:
+    async def run_all(self) -> StagingData | None:
         """
         Running ALLConfig Data
         """
         # TODO:
-        # add Semaphore
-        # rate limit handling
         # DB Traking
 
-        tasks: list[Coroutine[Any, Any, FinalFormatResult]] = []
-        sem = asyncio.Semaphore(5)  # Limit the number of concurrent tasks to 5
-
+        # create task for each indicator and run them concurrently
+        tasks: list[Coroutine[Any, Any, StagingData]] = []
         try:
+            # Iterate through ALL_INDICATORS and create tasks for each indicator
             for country, categories in ALL_INDICATORS.items():
                 for category, indicators in categories.items():
                     for indicators_name, meta in indicators.items():
@@ -55,33 +54,33 @@ class Orchest:
                                 indicators_name, meta, category, country
                             )
                         )
+            # Run all tasks concurrently and gather results
+            results: list[StagingData | BaseException] = await asyncio.gather(
+                *tasks, return_exceptions=True
+            )
 
-            async with sem:
-                results: list[FinalFormatResult | BaseException] = await asyncio.gather(
-                    *tasks, return_exceptions=True
-                )
+            data: list[StagingItems] = []
 
-            data: list[FinalFormatItems] = []
-
+            # Process results, handling exceptions and collecting successful results
             for result in results:
                 if isinstance(result, Exception):
                     logger.error(
                         "Error task, skiping indicator %s", result, exc_info=True
                     )
                     continue
-                elif isinstance(result, FinalFormatResult):
-                    data.extend(result.format_result)
+                elif isinstance(result, StagingData):
+                    data.extend(result.staging_result)
 
             logger.info("Orchestrator...done (%s Data)", len(data))
-            return FinalFormatResult(format_result=data)
+            return StagingData(staging_result=data)
         except exc.PipelineCrash:
             logger.exception("Pipeline process carsh during operation")
             raise
 
-    async def run_by_single(self, country: str, name: str) -> FinalFormatResult:
+    async def run_by_single(self, country: str, name: str) -> StagingData:
         "Running single process of indicator"
 
-        data: list[FinalFormatItems] = []
+        data: list[StagingItems] = []
 
         for category, indicators in ALL_INDICATORS[country].items():
             for indicator_name, meta in indicators.items():
@@ -92,11 +91,11 @@ class Orchest:
                         indicator_name, meta, category, country
                     )
 
-                    data.extend(records.format_result)
+                    data.extend(records.staging_result)
                 except exc.ProcessingFailed:
                     logger.exception("Failed to Procesed Indicators")
                     logger.warning("skipping  Indicators: %s", indicator_name)
                     continue
 
         logger.info("Orchestrator...done (%s Data)", len(data))
-        return FinalFormatResult(format_result=data)
+        return StagingData(staging_result=data)

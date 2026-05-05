@@ -2,10 +2,14 @@ from pydantic import BaseModel
 from typing import Any, Literal
 
 
-class BaseFetcherReturn(BaseModel):
-    api_type: Literal["bls", "fred", "bea"]
+class FinalresultFetcher(BaseModel):
+    """Base Class Final Result ALL Fetcher"""
+
+    source: Literal["bls", "fred", "bea"]
     fetch_result: Any
 
 
-class BaseParseReturn(BaseModel):
+class FinalresultParse(BaseModel):
+    """Base Class Final Result ALL Parse"""
+
     parse_result: dict[str, float]

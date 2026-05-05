@@ -13,15 +13,17 @@ import aiohttp
 import monitoring.exc_models as exc
 from providers.retry_http import Retryable
 from typing import Callable, cast
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class BLSProvider:
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, limit_requests: int = 5):
         self.api_key = api_key
         self.url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
         self.session: aiohttp.ClientSession | None = None
+        self.semaphore = asyncio.Semaphore(limit_requests)  # Limit concurrent requests
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -47,52 +49,67 @@ class BLSProvider:
         meta: BaseMetaModel,
     ) -> BLSSeries:
 
-        # chekc api key
-        if not self.api_key:
-            raise exc.ResourceNotFound(
-                "API KEY ERROR error api key please check on .env file"
-            )
-        # end year
-        end_year = datetime.now().year
+        try:
+            async with self.semaphore:
+                # chekc api key
+                if not self.api_key:
+                    raise exc.ResourceNotFound(f"Api key Not found for {meta.api}")
+                # end year
+                end_year = datetime.now().year
 
-        # build payload
-        payload: dict[str, list[str] | str | int] = {
-            "seriesid": [meta.id],
-            "apikey": self.api_key,
-            "startyear": meta.start_year,
-            "endyear": end_year,
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.url, json=payload, timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                # 4xx, 5xx
-                response.raise_for_status()
+                # build payload
+                payload: dict[str, list[str] | str | int] = {
+                    "seriesid": [meta.id],
+                    "apikey": self.api_key,
+                    "startyear": meta.start_year,
+                    "endyear": end_year,
+                }
+                # check session if not exists
+                if not self.session:
+                    raise exc.BLSRequestsError("HTTP BLS Session not initialized")
 
-                logger.info("BLS.gov Return Status Code: %s", response.status)
+                async with self.session.post(
+                    self.url, json=payload, timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    # 4xx, 5xx
+                    response.raise_for_status()
 
-                # handling respons 1xx, 3xx
-                if response.status != 200:
-                    raise exc.BLSRequestsError("Unexpected Error Respons")
-
-                try:
-                    data = await response.json()
-
-                    if data.get("status") != "REQUEST_SUCCEEDED":
-                        msg = data.get("message", ["Unknown api error"])
-                        # TODO:
-                        # this is fake message Daily limit, verify real respons daily limit message
-                        # if daily limit reched stop all request to bls server on Even loop and continue to next providers
-                        if "Your Daily Query Limit" in msg[0]:
-                            raise exc.RateLimit("Daily limit reached")
+                    # handling respons 1xx, 3xx
+                    if response.status != 200:
                         raise exc.BLSRequestsError(
-                            msg[0] if msg else "Unknown api error"
+                            "Unexpected Error Respons %s", response.status
                         )
 
-                    logger.debug("BLS RAW DATA JSON: %s", data)
-                    return BLSRawResponsedata.model_validate(data).Results
+                    logger.info("BLS.gov Return Status Code: %s", response.status)
+                    try:
+                        data = await response.json()
 
-                except ValidationError as e:
-                    raise exc.BLSRequestsError(f"Validation Response Error {e}") from e
-                except aiohttp.ContentTypeError as e:
-                    raise exc.BLSRequestsError(f"Content Error {e}") from e
+                        if data.get("status") != "REQUEST_SUCCEEDED":
+                            msg = data.get("message", ["Unknown api error"])
+                            # TODO:
+                            # this is fake message Daily limit, verify real respons daily limit message
+                            # if daily limit reched stop all request to bls server on Even loop and continue to next providers
+                            if "Your Daily Query Limit" in msg[0]:
+                                raise exc.RateLimit("Daily limit reached")
+                            raise exc.BLSRequestsError(
+                                msg[0] if msg else "Unknown api error"
+                            )
+
+                        logger.debug("BLS RAW DATA JSON: %s", data)
+                        return BLSRawResponsedata.model_validate(data).Results
+
+                    except ValidationError as e:
+                        raise exc.BLSRequestsError(
+                            f"Validation Response Error {e}"
+                        ) from e
+                    except aiohttp.ContentTypeError as e:
+                        raise exc.BLSRequestsError(f"Content Error {e}") from e
+        except aiohttp.ClientResponseError as e:
+            if e.status == 429:
+                raise exc.RateLimit("Too Many Requests") from e
+            elif e.status == 401:
+                raise exc.AuthenticationError("Unauthorized request respons") from e
+
+            raise exc.BLSRequestsError(f"HTTP Error: {e.status}") from e
+        except aiohttp.ClientError as e:
+            raise exc.BLSRequestsError(f"HTTP Client Error: {e}") from e
