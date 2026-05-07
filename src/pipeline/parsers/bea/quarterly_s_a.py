@@ -17,7 +17,7 @@ def parse_qsa_bea(data: FinalresultFetcher) -> FinalresultParse:
     RAW_DATA = BEARawRespons.model_validate(data.fetch_result)
 
     logger.debug(
-        "Parse data BEA QSA, Accept (%s data), Example: %s",
+        "Parse data BEA QSA, Accept %s data, Sample: %s",
         len(RAW_DATA.BEAAPI.Results.Data),
         RAW_DATA.BEAAPI.Results.Data,
     )
@@ -44,7 +44,7 @@ def parse_qsa_bea(data: FinalresultFetcher) -> FinalresultParse:
             raise exc.BEAParserError(f"Parsing BEA QSA Unknown ERROR {e}") from e
 
     logger.debug(
-        "Parse data BEA QSA Done Sampl data  %s",
+        "Parse QSA data Done Sampl data  %s",
         (parse_data.items(), len(parse_data)),
     )
 

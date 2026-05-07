@@ -13,7 +13,7 @@ def parse_monthly_fred(data: FinalresultFetcher) -> FinalresultParse:
     # Validation FinalresultFetcher
     RAW_DATA = FREDRawResponse.model_validate(data.fetch_result)
 
-    logger.debug("FRED Parsing Accept (%s Data)", len(RAW_DATA.observations))
+    logger.debug("FRED Parsing Accept %s Data", len(RAW_DATA.observations))
     result: dict[str, float] = {}
 
     for entry in RAW_DATA.observations:
@@ -28,5 +28,5 @@ def parse_monthly_fred(data: FinalresultFetcher) -> FinalresultParse:
         except Exception as e:
             raise exc.FREDParserError(f"Parsing FRED Unknown ERROR {e}") from e
 
-    logger.debug("Parsing Done with (%s Data)", len(result))
+    logger.debug("Parsing monthly done with %s Data", len(result))
     return FinalresultParse(parse_result=result)

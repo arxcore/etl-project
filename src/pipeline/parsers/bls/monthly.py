@@ -25,7 +25,7 @@ def parse_monthly_bls(data: FinalresultFetcher) -> FinalresultParse:
     skip_value = 0
 
     logger.debug(
-        "Parsing Data, debug raw data to procesed (%s Data), Example: %s",
+        "Parsing Data, debug raw data to procesed %s Data, Sample: %s",
         len(RAW_DATA.series),
         RAW_DATA.series,
     )
@@ -72,9 +72,9 @@ def parse_monthly_bls(data: FinalresultFetcher) -> FinalresultParse:
     except Exception as e:
         raise exc.BLSParserError(f"Parsing Monthly BLS Unknown Error {e}") from e
 
-    logger.debug("Final Parsing Accept (%s data)", len(parse_data))
+    logger.debug("monthly Parsing done %s data", len(parse_data))
 
     if skip_value > 0:
-        logger.info("[DEBUG SKIPING VALUE]  %s -> %s", skip_value, error)
+        logger.info("skipping value  %s -> %s", skip_value, error)
 
     return FinalresultParse(parse_result=parse_data)

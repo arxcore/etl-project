@@ -13,15 +13,15 @@ class ParseProcessors:
         self, raw_data: FinalresultFetcher, api: str, freq: str | None = None
     ) -> FinalresultParse:
         """Process Parse Data by api Type"""
-        logger.info("=" * 50)
+        logger.info("-" * 50)
 
         try:
             if api not in PARSE_REGISTER:
-                raise exc.RoutingError(f"api {api} not found in register parse")
+                raise exc.RoutingError(f"{api} not found in register parse")
 
             elif freq not in PARSE_REGISTER[api]:
                 raise exc.RoutingError(
-                    f"freq {freq} not found in register parse for api {api}"
+                    f"frequency {freq} not found in register parse for {api}"
                 )
             parsed = PARSE_REGISTER[api][freq]
             return parsed(raw_data)

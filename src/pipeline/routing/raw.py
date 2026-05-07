@@ -53,15 +53,14 @@ class RawProcessors:
 
     async def process_raw_data(self, meta: BaseMetaModel) -> FinalresultFetcher:
         """Fetch Raw Data from ALL Prioviders"""
-        logger.info("=" * 50)
-        logger.info("Fetch Raw Data From %s | ID %s", meta.api.upper(), meta.id)
+        logger.info("-" * 50)
+        logger.info("Fetch data from %s, code %s", meta.api.upper(), meta.id)
         logger.info(
-            "Start Year %s Month %s Frequency %s",
+            "start year %s, start month %s, frequency %s",
             meta.start_year,
             meta.start_month,
             meta.freq,
         )
-        logger.info("=" * 50)
         if meta.api not in self.providerd:
             raise KeyError(f"Source {meta.api} not Found")
         try:

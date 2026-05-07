@@ -49,7 +49,7 @@ class FREDProvider:
 
         # chekc api key
         if not self.api_key:
-            raise exc.ResourceNotFound(f"Apikey not found for {meta.api}")
+            raise exc.ResourceNotFound(f"{meta.api} apikey not found for")
 
         # build starr year and month
         start_year = f"{meta.start_year}-{meta.start_month:02d}-01"
@@ -83,7 +83,7 @@ class FREDProvider:
                             "Unexpected Error Responns %s", response.status
                         )
 
-                    logger.info("FRED Return Status Code: %s", response.status)
+                    logger.info("Fred HTTP status code %s", response.status)
 
                     try:
                         data = await response.json()
@@ -98,7 +98,13 @@ class FREDProvider:
                                 f"Unknown FRED Requests Error {error_msg}"
                             )
 
-                        return FREDRawResponse.model_validate(data)
+                        result = FREDRawResponse.model_validate(data)
+                        logger.debug("respons json raw data FRED: %s", data)
+                        logger.info(
+                            "Fred raw data validation done.. %s data",
+                            len(result.observations),
+                        )
+                        return result
 
                     except ValidationError as e:
                         raise exc.FREDRequestsError(

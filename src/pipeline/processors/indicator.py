@@ -92,8 +92,8 @@ class IndicatorsProcessors:
                 # single-element tuple to parse date_key once, reuse for .date() and .year
                 for date_obj in (datetime.strptime(date_key, "%Y-%m-%d"),)
             ]
-            logger.info("Staging data... Done With (%s Data)", len(items))
-            logger.debug("Data example %s", items[:10])
+            logger.info("Staging data Done.. %s Data, %s", len(items), name)
+            logger.debug("Sample data %s", items[:10])
 
             return StagingData(staging_result=items)
 

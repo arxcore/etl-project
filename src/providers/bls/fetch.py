@@ -53,7 +53,7 @@ class BLSProvider:
             async with self.semaphore:
                 # chekc api key
                 if not self.api_key:
-                    raise exc.ResourceNotFound(f"Api key Not found for {meta.api}")
+                    raise exc.ResourceNotFound(f"{meta.api} apikey not found")
                 # end year
                 end_year = datetime.now().year
 
@@ -66,7 +66,9 @@ class BLSProvider:
                 }
                 # check session if not exists
                 if not self.session:
-                    raise exc.BLSRequestsError("HTTP BLS Session not initialized")
+                    raise exc.BLSRequestsError(
+                        "connection HTTP BLS Session not initialized"
+                    )
 
                 async with self.session.post(
                     self.url, json=payload, timeout=aiohttp.ClientTimeout(total=30)
@@ -80,7 +82,7 @@ class BLSProvider:
                             "Unexpected Error Respons %s", response.status
                         )
 
-                    logger.info("BLS.gov Return Status Code: %s", response.status)
+                    logger.info("BLS HTTP status code %s", response.status)
                     try:
                         data = await response.json()
 
@@ -95,8 +97,13 @@ class BLSProvider:
                                 msg[0] if msg else "Unknown api error"
                             )
 
-                        logger.debug("BLS RAW DATA JSON: %s", data)
-                        return BLSRawResponsedata.model_validate(data).Results
+                        logger.debug("json respons raw data BLS: %s", data)
+                        result = BLSRawResponsedata.model_validate(data).Results
+                        logger.info(
+                            "BLS raw data validation done..  %s data",
+                            len(result.series),
+                        )
+                        return result
 
                     except ValidationError as e:
                         raise exc.BLSRequestsError(

@@ -58,7 +58,7 @@ class BEAProvider:
 
         # Check api key if not exists
         if not self.api_key:
-            raise exc.ResourceNotFound(f"Apikey Not found for {meta.api}")
+            raise exc.ResourceNotFound(f"{meta.api} apikey not found")
 
         # build Start year and end year
         start_range = list(range(meta.start_year, datetime.now().year + 1))
@@ -77,7 +77,7 @@ class BEAProvider:
         }
 
         if not self.session:
-            raise exc.BEARequestsError("HTTP BEA Session is Not Initialized")
+            raise exc.BEARequestsError("connection HTTP BEA Session is Not Initialized")
 
         try:
             async with self.semaphore:
@@ -95,16 +95,17 @@ class BEAProvider:
                             "Unexpected Error Respons %s", response.status
                         )
 
-                    logger.info("BEA Response Status Code Return %s", response.status)
+                    logger.info("BEA HTTP status code %s", response.status)
 
                     try:
                         data = await response.json()
 
-                        logger.debug("BEA Raw Data: %s", data)
+                        logger.debug("respons json raw data BEA: %s", data)
                         # Validate data
                         result = BEARawRespons.model_validate(data)
+
                         logger.info(
-                            "BEA Raw Data... Accept (%s data)",
+                            "BEA raw data validation done.. %s data",
                             len(result.BEAAPI.Results.Data),
                         )
                         return result

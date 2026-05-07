@@ -1,17 +1,20 @@
 import argparse
+from psycopg import AsyncConnection
+from psycopg.rows import TupleRow
+from psycopg_pool import AsyncConnectionPool
 import asyncio
 import logging
 import sys
 from typing import Optional
 import traceback
+from config.settings import CONN_STR
 from pipeline.processors.indicator import StagingData, IndicatorsProcessors
 from pipeline.routing import RawProcessors, ParseProcessors
-
-# from upload.postegres.psql import upload_to_db
 from config.metadata import ALL_INDICATORS
 from monitoring.base_logging.logger import configure_logging
 from pipeline.orchestrator import Orchest
 import monitoring.exc_models as exc
+from upload.postegres.load import LoadDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -98,13 +101,14 @@ def apply_log_level(log_level: int) -> None:
     logger.info("Set Logging Level Name %s ", log_name)
 
 
-def build_injection() -> Orchest:
+def build_injection(pool: AsyncConnectionPool[AsyncConnection[TupleRow]]) -> Orchest:
     """Build Dependency Injection for Pipeline"""
-
+    # Cofigure Connection Pool for Upload Data to Postgres
+    database = LoadDatabase(pool)
     procc_raw = RawProcessors()
     procc_parse = ParseProcessors()
     procc_indicator = IndicatorsProcessors(procc_raw, procc_parse)
-    return Orchest(procc_indicator)
+    return Orchest(procc_indicator, database)
 
 
 async def main() -> StagingData | None:
@@ -134,10 +138,6 @@ async def main() -> StagingData | None:
     run_mode.add_argument(
         "--list", action="store_true", help="list of available indicators"
     )
-    # upload = parse.add_argument_group("Upload To DataBase")
-    # upload.add_argument(
-    # "-u", "--upload", action="store_true", help="Upload data to PostgreSQL"
-    # )
     args = parse.parse_args()
 
     # setup logging
@@ -173,41 +173,31 @@ async def main() -> StagingData | None:
             sys.exit(1)
 
     # Execute Pipeline
-    orchest: Orchest = build_injection()
-
-    data: StagingData | None = None
     try:
-        async with orchest as orch:
-            # Run Single Indicator
-            if args.run == "single":
-                logger.info("=" * 50)
-                logger.info(
-                    "Run Single Indicator with country: %s | name: %s",
-                    args.country,
-                    args.name,
-                )
-                data = await orch.run_by_single(args.country, args.name)
+        async with AsyncConnectionPool[AsyncConnection[TupleRow]](
+            conninfo=CONN_STR,
+            min_size=1,
+            max_size=7,
+            max_waiting=10,
+            timeout=10,
+        ) as pool:
+            # Execute Pipeline
+            orchest: Orchest = build_injection(pool)
+            async with orchest as orch:
+                # Run Single Indicator
+                if args.run == "single":
+                    logger.info("=" * 50)
+                    logger.info(
+                        "Run Single Indicator country %s, name: %s",
+                        args.country,
+                        args.name,
+                    )
+                    await orch.run_by_single(args.country, args.name)
 
-            # Default Mode Run Pipeline
-            elif args.run == "all":
-                logger.info("Run ALL Config Indicators")
-                data = await orch.run_all()
-
-        # store data to db
-        # if args.upload and data is not None:
-        # await upload_to_db(data)
-
-        # logger.info(
-        # "Upload Data To Postgres with  (%s Data) ",
-        # len(data.staging_result),
-        # )
-
-        # Summary Final Results Pipeline Data
-        logger.info("=" * 50)
-        logger.info(
-            "Final Data Records (%s Data)",
-            len(data.staging_result) if data is not None else 0,
-        )
+                # Default Mode Run Pipeline
+                elif args.run == "all":
+                    logger.info("Run ALL Config Indicators")
+                    await orch.run_all()
 
     except exc.PipelineCrash as e:
         logger.exception("Error during execution pipeline: %s", e)

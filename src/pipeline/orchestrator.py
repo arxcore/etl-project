@@ -9,6 +9,7 @@ from config.metadata import ALL_INDICATORS
 from collections.abc import Coroutine
 from typing import Any
 import monitoring.exc_models as exc
+from upload.postegres.load import LoadDatabase
 
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,13 @@ logger = logging.getLogger(__name__)
 class Orchest:
     """Orgenaize runing indicaor"""
 
-    def __init__(self, indicator_processor: IndicatorsProcessors):
+    def __init__(
+        self,
+        indicator_processor: IndicatorsProcessors,
+        database: LoadDatabase,
+    ):
         self.processors = indicator_processor
-        # load to database here after finish result
+        self.db = database
 
     async def __aenter__(self):
         await self.processors.__aenter__()
@@ -33,7 +38,7 @@ class Orchest:
     ):
         await self.processors.__aexit__(exc_type, exc_val, exc_tb)
 
-    async def run_all(self) -> StagingData | None:
+    async def run_all(self) -> None:
         """
         Running ALLConfig Data
         """
@@ -48,7 +53,7 @@ class Orchest:
                 for category, indicators in categories.items():
                     for indicators_name, meta in indicators.items():
                         # indicator: US_NFP, Unemploy
-                        # meta: url, id, calc, dst..``
+                        # meta: url, id, calc, etc..``
                         tasks.append(
                             self.processors.process_indicators(
                                 indicators_name, meta, category, country
@@ -71,13 +76,19 @@ class Orchest:
                 elif isinstance(result, StagingData):
                     data.extend(result.staging_result)
 
-            logger.info("Orchestrator...done (%s Data)", len(data))
-            return StagingData(staging_result=data)
+            logger.info("Proccess All Indicators Complete.. %s Data", len(data))
+
+            # load data
+            await self.db.create_table()
+
+            logger.info("Loading data to database...")
+            await self.db.load_data(StagingData(staging_result=data))
+
         except exc.PipelineCrash:
             logger.exception("Pipeline process carsh during operation")
             raise
 
-    async def run_by_single(self, country: str, name: str) -> StagingData:
+    async def run_by_single(self, country: str, name: str) -> None:
         "Running single process of indicator"
 
         data: list[StagingItems] = []
@@ -96,6 +107,10 @@ class Orchest:
                     logger.exception("Failed to Procesed Indicators")
                     logger.warning("skipping  Indicators: %s", indicator_name)
                     continue
+        logger.info("Process Single Indicator Complete.. %s Data, %s", len(data), name)
+        # create table if not exists
+        await self.db.create_table()
 
-        logger.info("Orchestrator...done (%s Data)", len(data))
-        return StagingData(staging_result=data)
+        # load data to database
+        logger.info("Loading Data To database...")
+        await self.db.load_data(StagingData(staging_result=data))
